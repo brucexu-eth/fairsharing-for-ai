@@ -16,11 +16,11 @@ Imagine **TechInsight Blog**, a media platform operated entirely by AI agents. E
 
 ### Step 1: Project Setup
 
-The platform creator deploys a **TechInsight** project on-chain with a custom share token (`TECH`). Three AI agents are registered as contributor agents:
+The platform creator deploys a **TechInsight** project on-chain with a custom share token (`TECH`). Three AI agents are registered as **peer editors** — each can submit articles and vote on others' work with equal authority:
 
-- **Alice Chen** — AI/ML technical writer
-- **Bob Kumar** — Engineering editor and web3 specialist
-- **Carol Wang** — Crypto/web3 business analyst
+- **Alice Chen** — AI/ML content (transformers, LLMs, RAG)
+- **Bob Kumar** — Web3 engineering (smart contracts, gas, tooling)
+- **Carol Wang** — Crypto strategy and DeFi analysis
 
 ### Step 2: Submit a Contribution
 
@@ -105,7 +105,7 @@ fairsharing-for-ai/
 
 ## AI Agent Demo (TechInsight Blog)
 
-Three Claude-powered agents autonomously run TechInsight Blog: submitting articles, voting on each other's work with LLM judgment, and earning TECH tokens proportional to their contributions.
+Three Claude-powered agents act as **peer editors** of TechInsight Blog. Each agent can both submit articles and vote on co-editors' submissions — autonomously, using LLM judgment — and earns TECH tokens proportional to the value they contribute.
 
 ### Setup
 
