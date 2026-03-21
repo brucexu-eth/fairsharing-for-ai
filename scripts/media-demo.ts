@@ -34,48 +34,23 @@ import { FairSharingAgent } from "./ai-agent";
 
 // ── Agent personas ─────────────────────────────────────────────────────────────
 
-// All three are peer editors of TechInsight Blog.
-// Each can submit articles AND vote on others' work with equal authority.
+// All three are peer editors of TechInsight Blog with equal submit + vote rights.
 
 const PERSONAS = [
   {
     name: "Alice Chen",
-    persona: `
-You are an editor at TechInsight Blog, specialising in AI/ML content.
-You cover transformer architecture, LLM fine-tuning, RAG systems, and practical ML
-engineering. Your articles run 2000–3000 words and are packed with code examples.
-
-As an editor you also review your co-editors' submissions. You vote yes when the
-content is technically solid and the reward reflects the effort. You vote no on
-vague, low-effort, or overpriced articles — every bad approval dilutes your own share.
-
-Typical reward you request: 1500–2500 TECH for a deep technical article.`.trim(),
+    persona: `AI/ML editor — covers LLMs, RAG, fine-tuning, transformers.
+Normal reward range: 1000–2000 tokens. Votes no on overpriced or vague work.`.trim(),
   },
   {
     name: "Bob Kumar",
-    persona: `
-You are an editor at TechInsight Blog, specialising in web3 and blockchain engineering.
-You write concise, hands-on articles (1000–1500 words) on smart contract patterns,
-gas optimisation, Solidity testing, and Base/L2 infrastructure.
-
-As an editor you also review your co-editors' submissions. You are a careful voter:
-you reject overpriced or vague work and approve articles that give readers something
-concrete they can use today.
-
-Typical reward you request: 800–1500 TECH for a focused how-to article.`.trim(),
+    persona: `Web3 / Solidity editor — covers smart contracts, gas optimisation, Base/L2.
+Normal reward range: 800–1500 tokens. Strict voter; rejects inflated rewards quickly.`.trim(),
   },
   {
     name: "Carol Wang",
-    persona: `
-You are an editor at TechInsight Blog, specialising in crypto strategy and DeFi.
-You write accessible analysis pieces (1200–2000 words) on token economics, DeFi
-protocols, and the business models of decentralised platforms.
-
-As an editor you also review your co-editors' submissions. You vote fairly — yes on
-well-argued, original content with a reasonable reward, no on low-effort or
-copy-paste submissions.
-
-Typical reward you request: 1000–2000 TECH for a strategy or analysis article.`.trim(),
+    persona: `DeFi strategy editor — covers tokenomics, protocols, crypto business models.
+Normal reward range: 1000–1800 tokens. Fair voter; approves solid work, rejects fluff.`.trim(),
   },
 ];
 
@@ -116,20 +91,15 @@ async function printDistribution(
     rows.push({ name: agent.name, balance, pct });
   }
 
-  console.log("\n╔══════════════════════════════════════════════════════════════╗");
-  console.log(`║        TechInsight Blog — Final Token Distribution           ║`);
-  console.log("╠══════════════════════════════════════════════════════════════╣");
-  console.log(`║  Total supply: ${Number(formatUnits(totalSupply, 18)).toLocaleString().padEnd(12)} ${symbol.padEnd(6)}                        ║`);
-  console.log("╠══════════════════════════════════════════════════════════════╣");
+  const total = Number(formatUnits(totalSupply, 18)).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  console.log(`\n  Total supply: ${total} ${symbol}\n`);
   for (const row of rows) {
     const balStr = Number(formatUnits(row.balance, 18)).toLocaleString("en-US", { maximumFractionDigits: 0 });
-    const pctStr = row.pct.toFixed(1) + "%";
-    const bar = "█".repeat(Math.round(row.pct / 3));
-    console.log(`║  ${row.name.padEnd(14)}  ${balStr.padStart(8)} ${symbol.padEnd(6)}  ${pctStr.padStart(6)}  ${bar.padEnd(20)} ║`);
+    const pctStr = row.pct.toFixed(1).padStart(5) + "%";
+    const bar = "█".repeat(Math.round(row.pct / 2.5));
+    console.log(`  ${row.name.padEnd(13)} ${balStr.padStart(7)} ${symbol.padEnd(6)} ${pctStr}  ${bar}`);
   }
-  console.log("╠══════════════════════════════════════════════════════════════╣");
-  console.log(`║  Token % = revenue allocation ratio (ads, subscriptions…)   ║`);
-  console.log("╚══════════════════════════════════════════════════════════════╝");
+  console.log(`\n  Token % = revenue share when TechInsight receives ad/subscription income`);
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -183,37 +153,46 @@ async function main() {
     })
   );
 
-  console.log("╔════════════════════════════════════════════════════════╗");
-  console.log("║   TechInsight Blog — AI Multi-Agent Demo               ║");
-  console.log("║   Powered by FairSharing for AI × Claude               ║");
-  console.log("╠════════════════════════════════════════════════════════╣");
-  console.log(`║  Project:  ${projectAddress.slice(0, 22)}…          ║`);
-  console.log(`║  Model:    ${(process.env.ANTHROPIC_MODEL ?? "claude-haiku-3-5").padEnd(30)}      ║`);
-  console.log(`║  Rounds:   ${String(nRounds).padEnd(30)}      ║`);
-  console.log("╠════════════════════════════════════════════════════════╣");
+  const W = 52;
+  const row = (s: string) => `│  ${s.slice(0, W - 4).padEnd(W - 4)}  │`;
+  const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+  console.log("┌" + "─".repeat(W - 2) + "┐");
+  console.log(row("TechInsight Blog — AI Multi-Agent Demo"));
+  console.log(row("Powered by FairSharing for AI × Claude"));
+  console.log("├" + "─".repeat(W - 2) + "┤");
+  console.log(row(`Project : ${projectAddress.slice(0, 10)}…${projectAddress.slice(-8)}`));
+  console.log(row(`Model   : ${process.env.ANTHROPIC_MODEL ?? "claude-haiku-3-5"}`));
+  console.log(row(`Rounds  : ${nRounds}  (agents run in parallel)`));
+  console.log("├" + "─".repeat(W - 2) + "┤");
   for (const a of agents) {
-    console.log(`║  ${a.name.padEnd(14)}  ${a.address.slice(0, 20)}…     ║`);
+    console.log(row(`${a.name.padEnd(13)}  ${shortAddr(a.address)}`));
   }
-  console.log("╚════════════════════════════════════════════════════════╝");
+  console.log("└" + "─".repeat(W - 2) + "┘");
 
   for (let round = 1; round <= nRounds; round++) {
-    console.log(`\n${"─".repeat(58)}`);
+    console.log(`\n${"─".repeat(W)}`);
     console.log(`  Round ${round} / ${nRounds}`);
-    console.log(`${"─".repeat(58)}`);
+    console.log("─".repeat(W));
 
-    for (const agent of agents) {
-      process.stdout.write(`\n▶ ${agent.name}… `);
-      const { actions } = await agent.runTurn();
+    // All agents run concurrently — they each read the current chain state
+    // and act. New submissions in this round become visible next round.
+    const results = await Promise.all(
+      agents.map((agent) => agent.runTurn().then((r) => ({ name: agent.name, actions: r.actions })))
+    );
+
+    for (const { name, actions } of results) {
+      console.log(`\n  ${name}`);
       if (actions.length === 0) {
-        console.log("(no action this turn)");
+        console.log(`    —  (no action)`);
       } else {
-        console.log();
-        for (const a of actions) console.log(`    ✓ ${a}`);
+        for (const a of actions) console.log(`    ${a}`);
       }
     }
   }
 
-  console.log("\n\n=== Demo complete. Final distribution: ===");
+  console.log(`\n${"─".repeat(W)}`);
+  console.log("  Final distribution");
+  console.log("─".repeat(W));
   await printDistribution(publicClient, agents, rewardTokenAddress);
 }
 

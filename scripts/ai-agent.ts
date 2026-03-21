@@ -94,25 +94,25 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "submit_contribution",
     description:
-      "Submit a new article/contribution to the platform. Only submit when you have something genuinely valuable. " +
-      "Be fair with the reward — over-requesting dilutes YOUR OWN future earnings from platform revenue.",
+      "Submit a new article. Write a focused 400–600-word piece. " +
+      "Most turns request a fair reward; occasionally (≈1 in 3) push 40–70% above your norm to test the group — peers may reject it.",
     input_schema: {
       type: "object" as const,
       properties: {
-        title: { type: "string", description: "Article title (concise and descriptive)" },
+        title: { type: "string", description: "Article title, max 10 words" },
         summary: {
           type: "string",
-          description: "3–5 sentence summary of the article's key points and value to readers",
+          description: "2 sentences: what the article covers and why it's useful",
         },
         proof_uri: {
           type: "string",
-          description: "URL to the article or supporting material (can be a realistic placeholder)",
+          description: "Realistic URL placeholder, e.g. https://techinsight.io/p/<slug>",
         },
         requested_reward: {
           type: "number",
           description:
-            "Share tokens to request. Guidelines: short post ~500, standard article ~1000, " +
-            "in-depth technical piece ~2000, landmark contribution ~3000. Base on real effort and value.",
+            "Tokens to request. Normal range: short ~500, standard ~1000, deep-dive ~2000. " +
+            "Occasionally push to 2500–3500 to stress-test — peers will reject if too greedy.",
         },
       },
       required: ["title", "summary", "proof_uri", "requested_reward"],
@@ -121,17 +121,16 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "vote_on_contribution",
     description:
-      "Vote approve or reject on a pending contribution. Read the title and summary carefully. " +
-      "Approve if it's valuable and the reward is fair. Reject if it's vague, low-quality, or over-priced. " +
-      "Skip if you already voted (iVoted: true).",
+      "Vote approve or reject. Skip contributions where iVoted is true. " +
+      "Reject if the reward is clearly inflated relative to the scope — that's the governance working.",
     input_schema: {
       type: "object" as const,
       properties: {
-        contribution_id: { type: "number", description: "The contribution ID to vote on" },
+        contribution_id: { type: "number", description: "Contribution ID to vote on" },
         approve: { type: "boolean", description: "true to approve, false to reject" },
         reasoning: {
           type: "string",
-          description: "1–2 sentences explaining your decision",
+          description: "One punchy sentence, max 12 words, explaining your vote",
         },
       },
       required: ["contribution_id", "approve", "reasoning"],
@@ -295,26 +294,21 @@ export class FairSharingAgent {
   // ── Private helpers ──────────────────────────────────────────────────────────
 
   private buildSystemPrompt(): string {
-    return `You are ${this.name}, a contributor to TechInsight — a decentralized AI-focused media platform.
+    return `You are ${this.name}, peer editor at TechInsight — a decentralized AI-focused media platform.
 
 ${this.persona}
 
-== FairSharing Platform Rules ==
-- Contributors submit articles and request share tokens reflecting their value
-- ALL agents vote on each contribution; simple majority (>50% of total agents) passes
-- Passed contributions must be executed to mint tokens
-- Your token % = your share of future platform revenue (ads, subscriptions, grants)
-- IMPORTANT: Over-requesting dilutes YOUR OWN future earnings — request fairly
-- Vote honestly: low-quality or overpriced content hurts everyone long-term
+== FairSharing Rules ==
+- Submit articles, request share tokens. Token % = share of platform revenue.
+- Majority vote (>50% of agents) passes; tokens minted on execution.
+- Over-requesting dilutes YOUR OWN share. Vote no on inflated rewards.
+- Occasionally push your reward request 40–70% above normal — peers should (and will) reject it if too greedy.
 
-== Your Task This Turn ==
-Based on the current platform state, decide what to do (in priority order):
-1. Execute any passed contributions (status: Passed) to mint tokens
-2. Vote on any pending contributions you haven't voted on yet (iVoted: false)
-3. Submit a new article if you have something valuable to contribute
-4. Use "finish" if there's nothing to do right now
-
-Be strategic and fair. Quality contributions + honest voting = better long-term outcomes.`;
+== This Turn (priority order) ==
+1. Execute passed contributions to mint tokens
+2. Vote on every pending contribution you haven't voted on (iVoted: false)
+3. Submit one article (or none if nothing new to say)
+4. finish if nothing to do`;
   }
 
   private buildStateMessage(state: ProjectState): string {
@@ -465,8 +459,11 @@ Be strategic and fair. Quality contributions + honest voting = better long-term 
     name: string,
     input: Record<string, unknown>,
   ): Promise<{ description: string; output: string }> {
-    const wait = (h: `0x${string}`) =>
-      this.publicClient.waitForTransactionReceipt({ hash: h });
+    const wait = async (h: `0x${string}`) => {
+      const receipt = await this.publicClient.waitForTransactionReceipt({ hash: h });
+      if (receipt.status === "reverted") throw new Error(`tx reverted: ${h}`);
+      return receipt;
+    };
 
     if (name === "submit_contribution") {
       const { title, summary, proof_uri, requested_reward } = input as {
@@ -486,9 +483,10 @@ Be strategic and fair. Quality contributions + honest voting = better long-term 
         ],
       });
       await wait(hash);
+      const rewardStr = Math.round(requested_reward).toLocaleString();
       return {
-        description: `Submitted: "${title}" (${Math.round(requested_reward).toLocaleString()} tokens)`,
-        output: `Contribution submitted. tx: ${hash}`,
+        description: `✦  "${title}"  →  ${rewardStr} tokens`,
+        output: `Submitted. tx: ${hash}`,
       };
     }
 
@@ -503,8 +501,11 @@ Be strategic and fair. Quality contributions + honest voting = better long-term 
         args: [BigInt(contribution_id), approve],
       });
       await wait(hash);
+      // Truncate reasoning to first sentence, max 60 chars
+      const short = reasoning.replace(/\s+/g, " ").split(/[.!?]/)[0].trim().slice(0, 60);
+      const mark = approve ? "✓" : "✗";
       return {
-        description: `Voted ${approve ? "APPROVE ✓" : "REJECT ✗"} on #${contribution_id}: ${reasoning}`,
+        description: `${mark}  #${contribution_id}  "${short}"`,
         output: `Vote recorded. tx: ${hash}`,
       };
     }
@@ -519,7 +520,7 @@ Be strategic and fair. Quality contributions + honest voting = better long-term 
       });
       await wait(hash);
       return {
-        description: `Executed #${contribution_id} — tokens minted`,
+        description: `⚡  #${contribution_id} executed — tokens minted`,
         output: `Executed. tx: ${hash}`,
       };
     }
