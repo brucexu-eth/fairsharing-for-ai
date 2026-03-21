@@ -93,7 +93,7 @@ export default function ProjectPage() {
       .getLogs({
         address: projectAddress,
         event: PROPOSAL_SUBMITTED_EVENT,
-        fromBlock: 0n,
+        fromBlock: "earliest",
       })
       .then((logs) => {
         const map: Record<string, ProposalStrings> = {};
@@ -127,7 +127,7 @@ export default function ProjectPage() {
     // Re-fetch event logs on next render
     if (publicClient) {
       publicClient
-        .getLogs({ address: projectAddress, event: PROPOSAL_SUBMITTED_EVENT, fromBlock: 0n })
+        .getLogs({ address: projectAddress, event: PROPOSAL_SUBMITTED_EVENT, fromBlock: "earliest" })
         .then((logs) => {
           const map: Record<string, ProposalStrings> = {};
           for (const log of logs) {
@@ -415,14 +415,24 @@ function ProposalCard({
 
   return (
     <div className="card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 font-mono">#{id.toString()}</span>
             <StatusBadge status={status} />
           </div>
-          <h3 className="font-semibold text-gray-900 mt-1 truncate">{title}</h3>
-          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{summary}</p>
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          {summary && <p className="text-sm text-gray-600 whitespace-pre-wrap">{summary}</p>}
+          {proofURI && (
+            <a
+              href={proofURI}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:underline break-all"
+            >
+              {proofURI} ↗
+            </a>
+          )}
         </div>
         <div className="text-right shrink-0">
           <div className="text-lg font-bold text-indigo-600">
@@ -454,17 +464,7 @@ function ProposalCard({
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-400 space-y-0.5">
-          <div>
-            by {shortAddr(proposer)} · {timeAgo(createdAt)}
-            {proofURI && (
-              <>
-                {" · "}
-                <a href={proofURI} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
-                  proof ↗
-                </a>
-              </>
-            )}
-          </div>
+          <div>by {shortAddr(proposer)} · {timeAgo(createdAt)}</div>
           {showBeneficiary && (
             <div>reward → <span className="font-mono">{shortAddr(beneficiary)}</span></div>
           )}
