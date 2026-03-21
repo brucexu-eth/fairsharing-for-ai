@@ -17,6 +17,32 @@ import { StatusBadge } from "@/components/StatusBadge";
 
 type ProposalStrings = { title: string; summary: string; proofURI: string };
 
+/** Fetch ProposalSubmitted logs, respecting RPC 10k-block limit. */
+async function fetchProposalLogs(
+  client: ReturnType<typeof usePublicClient>,
+  projectAddress: `0x${string}`,
+) {
+  if (!client) return [];
+  const latest = await client.getBlockNumber();
+  const fromBlock = latest > 9999n ? latest - 9999n : 0n;
+  return client.getLogs({
+    address: projectAddress,
+    event: PROPOSAL_SUBMITTED_EVENT,
+    fromBlock,
+    toBlock: latest,
+  });
+}
+
+function logsToStrings(logs: Awaited<ReturnType<typeof fetchProposalLogs>>) {
+  const map: Record<string, ProposalStrings> = {};
+  for (const log of logs) {
+    const { id, title, summary, proofURI } = log.args as any;
+    if (id !== undefined)
+      map[id.toString()] = { title: title ?? "", summary: summary ?? "", proofURI: proofURI ?? "" };
+  }
+  return map;
+}
+
 export default function ProjectPage() {
   const { address } = useParams<{ address: `0x${string}` }>();
   const { address: userAddress } = useAccount();
@@ -89,26 +115,8 @@ export default function ProjectPage() {
   const [proposalStrings, setProposalStrings] = useState<Record<string, ProposalStrings>>({});
   useEffect(() => {
     if (!publicClient) return;
-    publicClient
-      .getLogs({
-        address: projectAddress,
-        event: PROPOSAL_SUBMITTED_EVENT,
-        fromBlock: "earliest",
-      })
-      .then((logs) => {
-        const map: Record<string, ProposalStrings> = {};
-        for (const log of logs) {
-          const { id, title, summary, proofURI } = log.args as any;
-          if (id !== undefined) {
-            map[id.toString()] = {
-              title: title ?? "",
-              summary: summary ?? "",
-              proofURI: proofURI ?? "",
-            };
-          }
-        }
-        setProposalStrings(map);
-      })
+    fetchProposalLogs(publicClient, projectAddress)
+      .then((logs) => setProposalStrings(logsToStrings(logs)))
       .catch(console.error);
   }, [publicClient, projectAddress, count]);
 
@@ -126,16 +134,8 @@ export default function ProjectPage() {
     resetWrite();
     // Re-fetch event logs on next render
     if (publicClient) {
-      publicClient
-        .getLogs({ address: projectAddress, event: PROPOSAL_SUBMITTED_EVENT, fromBlock: "earliest" })
-        .then((logs) => {
-          const map: Record<string, ProposalStrings> = {};
-          for (const log of logs) {
-            const { id, title, summary, proofURI } = log.args as any;
-            if (id !== undefined) map[id.toString()] = { title: title ?? "", summary: summary ?? "", proofURI: proofURI ?? "" };
-          }
-          setProposalStrings(map);
-        })
+      fetchProposalLogs(publicClient, projectAddress)
+        .then((logs) => setProposalStrings(logsToStrings(logs)))
         .catch(console.error);
     }
   };
