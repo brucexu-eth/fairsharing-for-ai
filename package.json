@@ -11,9 +11,12 @@
     "test": "bun run --filter '*' test",
     "agent:submit": "node --loader ts-node/esm scripts/agent-runner.ts submit",
     "agent:vote": "node --loader ts-node/esm scripts/agent-runner.ts vote",
-    "agent:round": "node --loader ts-node/esm scripts/agent-runner.ts round"
+    "agent:round": "node --loader ts-node/esm scripts/agent-runner.ts round",
+    "demo:media": "bun scripts/media-demo.ts",
+    "demo:media:5": "bun scripts/media-demo.ts --rounds=5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "viem": "^2.13.5"
   },
   "devDependencies": {
