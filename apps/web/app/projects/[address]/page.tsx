@@ -219,10 +219,10 @@ export default function ProjectPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: agents + forms */}
         <div className="space-y-4">
-          {/* Agents */}
+          {/* Contributor Agents */}
           <div className="card p-4">
             <h2 className="font-semibold text-sm text-gray-700 mb-3">
-              Agents ({agents?.length ?? 0})
+              Contributor Agents ({agents?.length ?? 0})
             </h2>
             {agents && agents.length > 0 ? (
               <ul className="space-y-1">
@@ -237,7 +237,7 @@ export default function ProjectPage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-gray-400">No agents yet.</p>
+              <p className="text-xs text-gray-400">No contributor agents yet.</p>
             )}
 
             {isOwner && (
@@ -250,16 +250,25 @@ export default function ProjectPage() {
                   disabled={isBusy}
                 />
                 <button type="submit" className="btn-primary w-full text-xs" disabled={isBusy || !newAgent.trim()}>
-                  Add Agent
+                  Add Contributor Agent
                 </button>
               </form>
             )}
           </div>
 
-          {/* Submit Proposal (agents only) */}
-          {isAgent && (
-            <div className="card p-4">
-              <h2 className="font-semibold text-sm text-gray-700 mb-3">Submit Contribution</h2>
+          {/* Submit Contribution — always visible, locked state when not eligible */}
+          <div className="card p-4">
+            <h2 className="font-semibold text-sm text-gray-700 mb-3">Submit Contribution</h2>
+
+            {!userAddress ? (
+              <p className="text-xs text-gray-400 py-2">
+                Connect your wallet to submit a contribution.
+              </p>
+            ) : !isAgent ? (
+              <p className="text-xs text-gray-400 py-2">
+                Only contributor agents can submit. Ask the project owner (<span className="font-mono">{shortAddr(owner ?? "")}</span>) to add your address.
+              </p>
+            ) : (
               <form onSubmit={handleSubmitProposal} className="space-y-2">
                 <div>
                   <label className="label text-xs">Title</label>
@@ -309,7 +318,7 @@ export default function ProjectPage() {
                   />
                 </div>
                 <div>
-                  <label className="label text-xs">Beneficiary Address <span className="text-gray-400">(optional — defaults to you)</span></label>
+                  <label className="label text-xs">Reward Recipient <span className="text-gray-400">(optional — defaults to you)</span></label>
                   <input
                     className="input text-xs font-mono"
                     placeholder="0x… leave blank to receive yourself"
@@ -323,22 +332,22 @@ export default function ProjectPage() {
                   className="btn-primary w-full text-xs"
                   disabled={isBusy || !form.title || !form.reward}
                 >
-                  {isPending ? "Confirm in wallet…" : isConfirming ? "Submitting…" : "Submit Proposal"}
+                  {isPending ? "Confirm in wallet…" : isConfirming ? "Submitting…" : "Submit Contribution"}
                 </button>
               </form>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Right column: proposals */}
+        {/* Right column: contributions */}
         <div className="lg:col-span-2 space-y-3">
           <h2 className="font-semibold text-gray-700">
-            Proposals ({count})
+            Contributions ({count})
           </h2>
 
           {count === 0 && (
             <div className="card p-8 text-center text-gray-400 text-sm">
-              No proposals yet.{isAgent ? " Submit one on the left." : ""}
+              No contributions yet. Submit one on the left.
             </div>
           )}
 
@@ -347,7 +356,7 @@ export default function ProjectPage() {
             // getProposal now returns: [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
             const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] =
               result.result;
-            const strings = proposalStrings[id.toString()] ?? { title: `Proposal #${id}`, summary: "", proofURI: "" };
+            const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
 
             return (
               <ProposalCard
