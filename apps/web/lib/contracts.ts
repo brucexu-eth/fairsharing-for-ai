@@ -18,7 +18,11 @@ export const FACTORY_ABI = [
     type: "event",
   },
   {
-    inputs: [{ internalType: "string", name: "name", type: "string" }],
+    inputs: [
+      { internalType: "string", name: "name", type: "string" },
+      { internalType: "string", name: "tokenName", type: "string" },
+      { internalType: "string", name: "tokenSymbol", type: "string" },
+    ],
     name: "createProject",
     outputs: [{ internalType: "address", name: "projectAddress", type: "address" }],
     stateMutability: "nonpayable",
@@ -69,7 +73,7 @@ export const FS_PROJECT_ABI = [
     anonymous: false,
     inputs: [
       { indexed: true, internalType: "uint256", name: "id", type: "uint256" },
-      { indexed: true, internalType: "address", name: "proposer", type: "address" },
+      { indexed: true, internalType: "address", name: "beneficiary", type: "address" },
       { indexed: false, internalType: "uint256", name: "reward", type: "uint256" },
     ],
     name: "ProposalExecuted",
@@ -88,11 +92,16 @@ export const FS_PROJECT_ABI = [
     type: "event",
   },
   {
+    // All string data lives here — read via getLogs, not storage.
     anonymous: false,
     inputs: [
       { indexed: true, internalType: "uint256", name: "id", type: "uint256" },
       { indexed: true, internalType: "address", name: "proposer", type: "address" },
+      { indexed: true, internalType: "address", name: "beneficiary", type: "address" },
       { indexed: false, internalType: "string", name: "title", type: "string" },
+      { indexed: false, internalType: "string", name: "summary", type: "string" },
+      { indexed: false, internalType: "string", name: "proofURI", type: "string" },
+      { indexed: false, internalType: "bytes32", name: "proofHash", type: "bytes32" },
       { indexed: false, internalType: "uint256", name: "requestedReward", type: "uint256" },
     ],
     name: "ProposalSubmitted",
@@ -132,9 +141,7 @@ export const FS_PROJECT_ABI = [
     outputs: [
       { internalType: "uint256", name: "id", type: "uint256" },
       { internalType: "address", name: "proposer", type: "address" },
-      { internalType: "string", name: "title", type: "string" },
-      { internalType: "string", name: "summary", type: "string" },
-      { internalType: "string", name: "proofURI", type: "string" },
+      { internalType: "address", name: "beneficiary", type: "address" },
       { internalType: "bytes32", name: "proofHash", type: "bytes32" },
       { internalType: "uint256", name: "requestedReward", type: "uint256" },
       { internalType: "uint256", name: "yesVotes", type: "uint256" },
@@ -204,6 +211,7 @@ export const FS_PROJECT_ABI = [
       { internalType: "string", name: "proofURI", type: "string" },
       { internalType: "bytes32", name: "proofHash", type: "bytes32" },
       { internalType: "uint256", name: "requestedReward", type: "uint256" },
+      { internalType: "address", name: "beneficiary", type: "address" },
     ],
     name: "submitProposal",
     outputs: [{ internalType: "uint256", name: "id", type: "uint256" }],
@@ -255,3 +263,19 @@ export const REWARD_TOKEN_ABI = [
 
 export const PROPOSAL_STATUS = ["Pending", "Passed", "Rejected", "Executed"] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUS)[number];
+
+/// The ProposalSubmitted event definition, used for getLogs queries.
+export const PROPOSAL_SUBMITTED_EVENT = {
+  name: "ProposalSubmitted",
+  type: "event",
+  inputs: [
+    { type: "uint256", name: "id", indexed: true },
+    { type: "address", name: "proposer", indexed: true },
+    { type: "address", name: "beneficiary", indexed: true },
+    { type: "string", name: "title", indexed: false },
+    { type: "string", name: "summary", indexed: false },
+    { type: "string", name: "proofURI", indexed: false },
+    { type: "bytes32", name: "proofHash", indexed: false },
+    { type: "uint256", name: "requestedReward", indexed: false },
+  ],
+} as const;

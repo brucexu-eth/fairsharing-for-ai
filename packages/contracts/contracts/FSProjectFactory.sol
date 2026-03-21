@@ -29,8 +29,15 @@ contract FSProjectFactory {
         erc8004Registry = _erc8004Registry;
     }
 
-    function createProject(string calldata name) external returns (address projectAddress) {
-        FSProject project = new FSProject(name, msg.sender, erc8004Registry);
+    /// @param name        Human-readable project name.
+    /// @param tokenName   Full name of the reward ERC-20 token (e.g. "My Project Reward").
+    /// @param tokenSymbol Ticker symbol of the reward token (e.g. "MPR").
+    function createProject(
+        string calldata name,
+        string calldata tokenName,
+        string calldata tokenSymbol
+    ) external returns (address projectAddress) {
+        FSProject project = new FSProject(name, msg.sender, erc8004Registry, tokenName, tokenSymbol);
         projectAddress = address(project);
 
         _projects.push(

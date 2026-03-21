@@ -7,6 +7,10 @@ import "./interfaces/IERC8004Registry.sol";
 /// @title FSProject
 /// @notice On-chain contribution tracking and incentive distribution for AI Agent collaboration.
 ///         Agents submit proposals, peer agents vote, passed proposals auto-mint reward tokens.
+///
+///         Gas optimisation: title, summary, and proofURI are NOT stored in contract storage.
+///         They are emitted in the ProposalSubmitted event only. Clients reconstruct them via
+///         eth_getLogs — no backend required.
 contract FSProject {
     string public name;
     address public owner;
@@ -28,10 +32,9 @@ contract FSProject {
     struct Proposal {
         uint256 id;
         address proposer;
-        string title;
-        string summary;
-        string proofURI;
-        bytes32 proofHash;
+        /// @dev Who receives the minted reward. Set at submit time; cannot be changed.
+        address beneficiary;
+        bytes32 proofHash;       // stored on-chain for off-chain integrity verification
         uint256 requestedReward;
         uint256 yesVotes;
         uint256 noVotes;
@@ -40,26 +43,31 @@ contract FSProject {
     }
 
     uint256 public proposalCount;
-    mapping(uint256 => Proposal) public proposals;
+    mapping(uint256 => Proposal) private proposals;
     // proposalId => voter => hasVoted
     mapping(uint256 => mapping(address => bool)) public hasVoted;
 
     event AgentAdded(address indexed agent);
     event AgentRemoved(address indexed agent);
+
+    /// @notice Emitted when a proposal is submitted.
+    ///         title / summary / proofURI are stored here ONLY (not in storage) to save gas.
+    ///         Clients index these via eth_getLogs.
     event ProposalSubmitted(
         uint256 indexed id,
         address indexed proposer,
+        address indexed beneficiary,
         string title,
+        string summary,
+        string proofURI,
+        bytes32 proofHash,
         uint256 requestedReward
     );
+
     event ProposalVoted(uint256 indexed id, address indexed voter, bool support);
     event ProposalPassed(uint256 indexed id);
     event ProposalRejected(uint256 indexed id);
-    event ProposalExecuted(
-        uint256 indexed id,
-        address indexed proposer,
-        uint256 reward
-    );
+    event ProposalExecuted(uint256 indexed id, address indexed beneficiary, uint256 reward);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "FSProject: not owner");
@@ -74,16 +82,14 @@ contract FSProject {
     constructor(
         string memory _name,
         address _owner,
-        address _erc8004Registry
+        address _erc8004Registry,
+        string memory _tokenName,
+        string memory _tokenSymbol
     ) {
         name = _name;
         owner = _owner;
         erc8004Registry = IERC8004Registry(_erc8004Registry);
-        rewardToken = new RewardToken(
-            string.concat(_name, " Reward"),
-            "FSR",
-            address(this)
-        );
+        rewardToken = new RewardToken(_tokenName, _tokenSymbol, address(this));
     }
 
     // ─── Agent Management ────────────────────────────────────────────────────
@@ -126,26 +132,30 @@ contract FSProject {
 
     // ─── Proposals ───────────────────────────────────────────────────────────
 
+    /// @notice Submit a contribution proposal.
+    /// @param beneficiary Who receives the minted reward on execution.
+    ///                    Pass address(0) to default to msg.sender (the proposer).
     function submitProposal(
         string calldata title,
         string calldata summary,
         string calldata proofURI,
         bytes32 proofHash,
-        uint256 requestedReward
+        uint256 requestedReward,
+        address beneficiary
     ) external onlyAgent returns (uint256 id) {
+        address _beneficiary = beneficiary == address(0) ? msg.sender : beneficiary;
         id = proposalCount++;
         Proposal storage p = proposals[id];
         p.id = id;
         p.proposer = msg.sender;
-        p.title = title;
-        p.summary = summary;
-        p.proofURI = proofURI;
+        p.beneficiary = _beneficiary;
         p.proofHash = proofHash;
         p.requestedReward = requestedReward;
         p.status = ProposalStatus.Pending;
         p.createdAt = block.timestamp;
 
-        emit ProposalSubmitted(id, msg.sender, title, requestedReward);
+        // All string fields go into the event, not storage.
+        emit ProposalSubmitted(id, msg.sender, _beneficiary, title, summary, proofURI, proofHash, requestedReward);
     }
 
     // ─── Voting ──────────────────────────────────────────────────────────────
@@ -178,35 +188,31 @@ contract FSProject {
 
     // ─── Execution ───────────────────────────────────────────────────────────
 
-    /// @notice Anyone can execute a passed proposal. Mints requestedReward tokens to proposer.
+    /// @notice Anyone can execute a passed proposal. Mints requestedReward tokens to beneficiary.
     function executeProposal(uint256 proposalId) external {
         Proposal storage p = proposals[proposalId];
         require(p.status == ProposalStatus.Passed, "FSProject: not passed");
 
         p.status = ProposalStatus.Executed;
-        rewardToken.mint(p.proposer, p.requestedReward);
+        rewardToken.mint(p.beneficiary, p.requestedReward);
 
-        emit ProposalExecuted(proposalId, p.proposer, p.requestedReward);
+        emit ProposalExecuted(proposalId, p.beneficiary, p.requestedReward);
     }
 
     // ─── Views ───────────────────────────────────────────────────────────────
 
-    function getProposal(
-        uint256 proposalId
-    )
+    function getProposal(uint256 proposalId)
         external
         view
         returns (
             uint256 id,
             address proposer,
-            string memory title,
-            string memory summary,
-            string memory proofURI,
+            address beneficiary,
             bytes32 proofHash,
             uint256 requestedReward,
             uint256 yesVotes,
             uint256 noVotes,
-            ProposalStatus status,
+            uint8 status,
             uint256 createdAt
         )
     {
@@ -214,14 +220,12 @@ contract FSProject {
         return (
             p.id,
             p.proposer,
-            p.title,
-            p.summary,
-            p.proofURI,
+            p.beneficiary,
             p.proofHash,
             p.requestedReward,
             p.yesVotes,
             p.noVotes,
-            p.status,
+            uint8(p.status),
             p.createdAt
         );
     }

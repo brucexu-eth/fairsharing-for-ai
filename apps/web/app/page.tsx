@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
-import { parseUnits } from "viem";
 import { FACTORY_ABI, FACTORY_ADDRESS } from "@/lib/contracts";
 import { shortAddr } from "@/lib/format";
 import Link from "next/link";
 
 export default function Home() {
   const { address } = useAccount();
-  const [projectName, setProjectName] = useState("");
+  const [form, setForm] = useState({ name: "", tokenName: "", tokenSymbol: "" });
 
   const { data: projects, refetch } = useReadContract({
     address: FACTORY_ADDRESS,
@@ -22,19 +21,19 @@ export default function Home() {
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!projectName.trim()) return;
+    if (!form.name.trim() || !form.tokenName.trim() || !form.tokenSymbol.trim()) return;
     writeContract({
       address: FACTORY_ADDRESS,
       abi: FACTORY_ABI,
       functionName: "createProject",
-      args: [projectName.trim()],
+      args: [form.name.trim(), form.tokenName.trim(), form.tokenSymbol.trim().toUpperCase()],
     });
   }
 
-  // Refetch after a new project is created
   if (isSuccess) refetch();
 
   const noFactory = !FACTORY_ADDRESS;
+  const isBusy = isPending || isConfirming;
 
   return (
     <div className="space-y-8">
@@ -58,18 +57,47 @@ export default function Home() {
       {/* Create Project */}
       <div className="card p-6">
         <h2 className="text-lg font-semibold mb-4">Create New Project</h2>
-        <form onSubmit={handleCreate} className="flex gap-3">
-          <input
-            className="input flex-1"
-            placeholder="Project name"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            disabled={!address || noFactory || isPending || isConfirming}
-          />
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div>
+            <label className="label text-xs">Project Name</label>
+            <input
+              className="input"
+              placeholder="e.g. My AI Agent Team"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              disabled={!address || noFactory || isBusy}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label text-xs">Reward Token Name</label>
+              <input
+                className="input"
+                placeholder="e.g. My Project Reward"
+                value={form.tokenName}
+                onChange={(e) => setForm((f) => ({ ...f, tokenName: e.target.value }))}
+                disabled={!address || noFactory || isBusy}
+                required
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Token Symbol</label>
+              <input
+                className="input uppercase"
+                placeholder="e.g. MPR"
+                maxLength={8}
+                value={form.tokenSymbol}
+                onChange={(e) => setForm((f) => ({ ...f, tokenSymbol: e.target.value }))}
+                disabled={!address || noFactory || isBusy}
+                required
+              />
+            </div>
+          </div>
           <button
             type="submit"
-            className="btn-primary"
-            disabled={!address || noFactory || isPending || isConfirming || !projectName.trim()}
+            className="btn-primary w-full"
+            disabled={!address || noFactory || isBusy || !form.name.trim() || !form.tokenName.trim() || !form.tokenSymbol.trim()}
           >
             {isPending ? "Confirm in wallet…" : isConfirming ? "Creating…" : "Create Project"}
           </button>

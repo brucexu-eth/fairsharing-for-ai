@@ -14,7 +14,7 @@ describe("FSProject", () => {
     const Factory = await ethers.getContractFactory("FSProjectFactory");
     factory = await Factory.deploy(ethers.ZeroAddress); // skip ERC-8004 checks in tests
 
-    const tx = await factory.connect(owner).createProject("Test Project");
+    const tx = await factory.connect(owner).createProject("Test Project", "Test Reward", "TST");
     const receipt = await tx.wait();
     const event = receipt!.logs
       .map((log) => factory.interface.parseLog(log as any))
@@ -41,7 +41,8 @@ describe("FSProject", () => {
           "Implemented REST API for the project",
           "https://github.com/example/pr/1",
           ethers.keccak256(ethers.toUtf8Bytes("proof")),
-          ethers.parseEther("1000")
+          ethers.parseEther("1000"),
+          ethers.ZeroAddress  // beneficiary = proposer
         )
       ).to.emit(project, "ProposalSubmitted");
     });
@@ -53,9 +54,35 @@ describe("FSProject", () => {
           "summary",
           "uri",
           ethers.ZeroHash,
-          100n
+          100n,
+          ethers.ZeroAddress
         )
       ).to.be.revertedWith("FSProject: not an agent");
+    });
+
+    it("mints reward to explicit beneficiary, not proposer", async () => {
+      // agent1 submits but designates stranger as beneficiary
+      const tx = await project.connect(agent1).submitProposal(
+        "Delegated Task",
+        "Work done on behalf of stranger",
+        "https://github.com/example/pr/99",
+        ethers.ZeroHash,
+        ethers.parseEther("500"),
+        stranger.address  // beneficiary != proposer
+      );
+      const receipt = await tx.wait();
+      const event = receipt!.logs
+        .map((log) => project.interface.parseLog(log as any))
+        .find((e) => e?.name === "ProposalSubmitted");
+      const proposalId = event!.args.id;
+
+      // pass it
+      await project.connect(agent2).vote(proposalId, true);
+      await project.connect(agent3).vote(proposalId, true);
+      await project.connect(owner).executeProposal(proposalId);
+
+      expect(await rewardToken.balanceOf(stranger.address)).to.equal(ethers.parseEther("500"));
+      expect(await rewardToken.balanceOf(agent1.address)).to.equal(0n);
     });
   });
 
@@ -68,7 +95,8 @@ describe("FSProject", () => {
         "Implemented REST API",
         "https://github.com/example/pr/1",
         ethers.ZeroHash,
-        ethers.parseEther("1000")
+        ethers.parseEther("1000"),
+        ethers.ZeroAddress  // beneficiary = agent1
       );
       const receipt = await tx.wait();
       const event = receipt!.logs
@@ -91,7 +119,7 @@ describe("FSProject", () => {
         .withArgs(proposalId);
     });
 
-    it("mints reward tokens on execute", async () => {
+    it("mints reward tokens to beneficiary on execute", async () => {
       await project.connect(agent2).vote(proposalId, true);
       await project.connect(agent3).vote(proposalId, true);
 

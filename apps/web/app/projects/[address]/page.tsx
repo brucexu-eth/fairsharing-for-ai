@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import {
   useReadContract,
@@ -8,15 +8,19 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useAccount,
+  usePublicClient,
 } from "wagmi";
 import { keccak256, toBytes, parseUnits, formatUnits } from "viem";
-import { FS_PROJECT_ABI, REWARD_TOKEN_ABI } from "@/lib/contracts";
-import { shortAddr, formatToken, statusLabel, statusClasses, timeAgo } from "@/lib/format";
+import { FS_PROJECT_ABI, REWARD_TOKEN_ABI, PROPOSAL_SUBMITTED_EVENT } from "@/lib/contracts";
+import { shortAddr, formatToken, timeAgo } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
+
+type ProposalStrings = { title: string; summary: string; proofURI: string };
 
 export default function ProjectPage() {
   const { address } = useParams<{ address: `0x${string}` }>();
   const { address: userAddress } = useAccount();
+  const publicClient = usePublicClient();
   const projectAddress = address as `0x${string}`;
 
   // ── Project info ───────────────────────────────────────────────────────────
@@ -68,7 +72,7 @@ export default function ProjectPage() {
   const isOwner = userAddress && owner && userAddress.toLowerCase() === owner.toLowerCase();
   const isAgent = userAddress && agents?.some((a) => a.toLowerCase() === userAddress.toLowerCase());
 
-  // ── Read proposals ─────────────────────────────────────────────────────────
+  // ── Read proposals (on-chain state) ────────────────────────────────────────
   const count = Number(proposalCount ?? 0);
   const { data: proposalResults, refetch: refetchProposals } = useReadContracts({
     contracts: Array.from({ length: count }, (_, i) => ({
@@ -79,6 +83,34 @@ export default function ProjectPage() {
     })),
     query: { enabled: count > 0 },
   });
+
+  // ── Fetch string data from ProposalSubmitted events ─────────────────────────
+  // title, summary, proofURI are stored in events only (gas optimisation).
+  const [proposalStrings, setProposalStrings] = useState<Record<string, ProposalStrings>>({});
+  useEffect(() => {
+    if (!publicClient) return;
+    publicClient
+      .getLogs({
+        address: projectAddress,
+        event: PROPOSAL_SUBMITTED_EVENT,
+        fromBlock: 0n,
+      })
+      .then((logs) => {
+        const map: Record<string, ProposalStrings> = {};
+        for (const log of logs) {
+          const { id, title, summary, proofURI } = log.args as any;
+          if (id !== undefined) {
+            map[id.toString()] = {
+              title: title ?? "",
+              summary: summary ?? "",
+              proofURI: proofURI ?? "",
+            };
+          }
+        }
+        setProposalStrings(map);
+      })
+      .catch(console.error);
+  }, [publicClient, projectAddress, count]);
 
   // ── Write contract ─────────────────────────────────────────────────────────
   const { writeContract, data: txHash, isPending, reset: resetWrite } = useWriteContract();
@@ -92,6 +124,20 @@ export default function ProjectPage() {
     refetchProposals();
     refetchBalance();
     resetWrite();
+    // Re-fetch event logs on next render
+    if (publicClient) {
+      publicClient
+        .getLogs({ address: projectAddress, event: PROPOSAL_SUBMITTED_EVENT, fromBlock: 0n })
+        .then((logs) => {
+          const map: Record<string, ProposalStrings> = {};
+          for (const log of logs) {
+            const { id, title, summary, proofURI } = log.args as any;
+            if (id !== undefined) map[id.toString()] = { title: title ?? "", summary: summary ?? "", proofURI: proofURI ?? "" };
+          }
+          setProposalStrings(map);
+        })
+        .catch(console.error);
+    }
   };
 
   if (isTxSuccess) refetchAll();
@@ -116,9 +162,11 @@ export default function ProjectPage() {
     summary: "",
     proofURI: "",
     reward: "",
+    beneficiary: "",
   });
   function handleSubmitProposal(e: React.FormEvent) {
     e.preventDefault();
+    const beneficiary = form.beneficiary.trim() as `0x${string}` | "";
     writeContract({
       address: projectAddress,
       abi: FS_PROJECT_ABI,
@@ -129,9 +177,10 @@ export default function ProjectPage() {
         form.proofURI,
         keccak256(toBytes(form.proofURI || form.title)),
         parseUnits(form.reward || "0", 18),
+        (beneficiary || "0x0000000000000000000000000000000000000000") as `0x${string}`,
       ],
     });
-    setForm({ title: "", summary: "", proofURI: "", reward: "" });
+    setForm({ title: "", summary: "", proofURI: "", reward: "", beneficiary: "" });
   }
 
   const isBusy = isPending || isConfirming;
@@ -157,7 +206,7 @@ export default function ProjectPage() {
             <div className="text-2xl font-bold text-indigo-600">
               {totalSupply !== undefined ? formatToken(totalSupply) : "—"}
             </div>
-            <div className="text-xs text-gray-400">{tokenSymbol ?? "FSR"} total minted</div>
+            <div className="text-xs text-gray-400">{tokenSymbol ?? "—"} total minted</div>
             {userAddress && myBalance !== undefined && (
               <div className="text-xs text-gray-500 mt-0.5">
                 Your balance: <strong>{formatToken(myBalance)} {tokenSymbol}</strong>
@@ -246,7 +295,7 @@ export default function ProjectPage() {
                   />
                 </div>
                 <div>
-                  <label className="label text-xs">Requested Reward (FSR)</label>
+                  <label className="label text-xs">Requested Reward ({tokenSymbol ?? "tokens"})</label>
                   <input
                     className="input text-xs"
                     type="number"
@@ -256,6 +305,16 @@ export default function ProjectPage() {
                     value={form.reward}
                     onChange={(e) => setForm((f) => ({ ...f, reward: e.target.value }))}
                     required
+                    disabled={isBusy}
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">Beneficiary Address <span className="text-gray-400">(optional — defaults to you)</span></label>
+                  <input
+                    className="input text-xs font-mono"
+                    placeholder="0x… leave blank to receive yourself"
+                    value={form.beneficiary}
+                    onChange={(e) => setForm((f) => ({ ...f, beneficiary: e.target.value }))}
                     disabled={isBusy}
                   />
                 </div>
@@ -285,17 +344,20 @@ export default function ProjectPage() {
 
           {proposalResults?.map((result) => {
             if (result.status !== "success" || !result.result) return null;
-            const [id, proposer, title, summary, proofURI, , requestedReward, yesVotes, noVotes, status, createdAt] =
+            // getProposal now returns: [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
+            const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] =
               result.result;
+            const strings = proposalStrings[id.toString()] ?? { title: `Proposal #${id}`, summary: "", proofURI: "" };
 
             return (
               <ProposalCard
                 key={id.toString()}
                 id={id}
                 proposer={proposer}
-                title={title}
-                summary={summary}
-                proofURI={proofURI}
+                beneficiary={beneficiary}
+                title={strings.title}
+                summary={strings.summary}
+                proofURI={strings.proofURI}
                 requestedReward={requestedReward}
                 yesVotes={yesVotes}
                 noVotes={noVotes}
@@ -306,7 +368,7 @@ export default function ProjectPage() {
                 userAddress={userAddress}
                 isBusy={isBusy}
                 onWrite={(args) => writeContract(args)}
-                tokenSymbol={tokenSymbol ?? "FSR"}
+                tokenSymbol={tokenSymbol ?? "tokens"}
                 totalAgents={agents?.length ?? 0}
               />
             );
@@ -320,11 +382,11 @@ export default function ProjectPage() {
 // ── ProposalCard ───────────────────────────────────────────────────────────────
 
 function ProposalCard({
-  id, proposer, title, summary, proofURI, requestedReward,
+  id, proposer, beneficiary, title, summary, proofURI, requestedReward,
   yesVotes, noVotes, status, createdAt,
   projectAddress, isAgent, userAddress, isBusy, onWrite, tokenSymbol, totalAgents,
 }: {
-  id: bigint; proposer: string; title: string; summary: string; proofURI: string;
+  id: bigint; proposer: string; beneficiary: string; title: string; summary: string; proofURI: string;
   requestedReward: bigint; yesVotes: bigint; noVotes: bigint; status: number;
   createdAt: bigint; projectAddress: `0x${string}`; isAgent: boolean;
   userAddress?: string; isBusy: boolean;
@@ -340,6 +402,7 @@ function ProposalCard({
   });
 
   const canVote = isAgent && status === 0 && !alreadyVoted;
+  const showBeneficiary = beneficiary.toLowerCase() !== proposer.toLowerCase();
 
   return (
     <div className="card p-4 space-y-3">
@@ -381,15 +444,20 @@ function ProposalCard({
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="text-xs text-gray-400">
-          by {shortAddr(proposer)} · {timeAgo(createdAt)}
-          {proofURI && (
-            <>
-              {" · "}
-              <a href={proofURI} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
-                proof ↗
-              </a>
-            </>
+        <div className="text-xs text-gray-400 space-y-0.5">
+          <div>
+            by {shortAddr(proposer)} · {timeAgo(createdAt)}
+            {proofURI && (
+              <>
+                {" · "}
+                <a href={proofURI} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline">
+                  proof ↗
+                </a>
+              </>
+            )}
+          </div>
+          {showBeneficiary && (
+            <div>reward → <span className="font-mono">{shortAddr(beneficiary)}</span></div>
           )}
         </div>
 

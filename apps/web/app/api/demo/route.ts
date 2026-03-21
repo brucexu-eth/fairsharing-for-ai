@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
           "https://github.com/brucexu-eth/fairsharing-for-ai",
           keccak256(toBytes("https://github.com/brucexu-eth/fairsharing-for-ai")),
           parseUnits("1000", 18),
+          "0x0000000000000000000000000000000000000000",  // beneficiary = proposer
         ],
       });
       await waitTx(hash);
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
           "https://github.com/brucexu-eth/fairsharing-for-ai/blob/main/README.md",
           keccak256(toBytes("readme")),
           parseUnits("5000", 18),
+          "0x0000000000000000000000000000000000000000",  // beneficiary = proposer
         ],
       });
       await waitTx(hash);
@@ -130,7 +132,8 @@ export async function POST(req: NextRequest) {
         const proposal = await publicClient.readContract({
           address: addr, abi: FS_PROJECT_ABI, functionName: "getProposal", args: [i],
         });
-        const [id, , , , , , requestedReward, , , status] = proposal;
+        // [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
+        const [id, , , , requestedReward, , , status] = proposal;
         if (status !== 0) { logs.push(`Proposal #${i}: already decided, skipping`); continue; }
 
         const rewardNum = parseFloat(formatUnits(requestedReward, 18));
@@ -168,7 +171,8 @@ export async function POST(req: NextRequest) {
         const proposal = await publicClient.readContract({
           address: addr, abi: FS_PROJECT_ABI, functionName: "getProposal", args: [i],
         });
-        const [id, proposer, , , , , requestedReward, , , status] = proposal;
+        // [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
+        const [id, , beneficiary, , requestedReward, , , status] = proposal;
         if (status !== 1) continue; // only Passed (1)
 
         const hash = await alpha.writeContract({
@@ -176,7 +180,7 @@ export async function POST(req: NextRequest) {
         });
         await waitTx(hash);
         logs.push(
-          `Executed #${id}: minted ${formatUnits(requestedReward, 18)} FSR → ${proposer.slice(0, 8)}…`
+          `Executed #${id}: minted ${formatUnits(requestedReward, 18)} tokens → ${beneficiary.slice(0, 8)}…`
         );
       }
     }

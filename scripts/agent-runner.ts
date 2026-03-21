@@ -84,6 +84,7 @@ async function submitDemo() {
       "https://github.com/brucexu-eth/fairsharing-for-ai",
       keccak256(toBytes(`demo-${Date.now()}`)),
       parseUnits("1000", 18),
+      "0x0000000000000000000000000000000000000000",  // beneficiary = proposer
     ],
   });
   await wait(h);
@@ -100,17 +101,18 @@ async function voteDemo() {
   }) as bigint;
 
   for (let i = 0n; i < count; i++) {
+    // [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
     const p = await publicClient.readContract({
       address: PROJECT_ADDRESS,
       abi: FS_PROJECT_ABI,
       functionName: "getProposal",
       args: [i],
-    }) as readonly [bigint, string, string, string, string, `0x${string}`, bigint, bigint, bigint, number, bigint];
+    }) as readonly [bigint, string, string, `0x${string}`, bigint, bigint, bigint, number, bigint];
 
-    const status = p[9]; // 0=Pending,1=Passed,2=Rejected,3=Executed
+    const status = p[7]; // 0=Pending,1=Passed,2=Rejected,3=Executed
     if (status !== 0) { console.log(`  Proposal #${i}: not pending, skipping`); continue; }
 
-    const reward = p[6];
+    const reward = p[4];
     for (let j = 0; j < agentKeys.length; j++) {
       const wallet = getWalletClient(agentKeys[j]);
       const voted = await publicClient.readContract({
