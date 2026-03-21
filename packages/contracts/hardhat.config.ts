@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "dotenv/config";
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -22,17 +23,23 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: {
-      "base-sepolia": process.env.BASESCAN_API_KEY ?? "",
-      base: process.env.BASESCAN_API_KEY ?? "",
-    },
+    // Etherscan V2: single key covers all chains
+    apiKey: process.env.BASESCAN_API_KEY ?? "",
     customChains: [
       {
         network: "base-sepolia",
         chainId: 84532,
         urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=84532",
           browserURL: "https://sepolia.basescan.org",
+        },
+      },
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
+          browserURL: "https://basescan.org",
         },
       },
     ],
