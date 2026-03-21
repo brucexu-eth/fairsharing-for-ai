@@ -186,18 +186,16 @@ export default function ProjectPage() {
     <div className="space-y-3">
       <a href="/" className="text-sm text-indigo-600 hover:underline">← All Projects</a>
 
-      {/* Governance rules banner — collapsible */}
-      <details className="card p-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 group">
-        <summary className="text-xs font-semibold text-indigo-800 cursor-pointer select-none">
-          📜 How FairSharing Governance Works
-        </summary>
-        <ol className="text-xs text-gray-700 mt-2 space-y-1 list-decimal list-inside">
-          <li><strong>Submit</strong> — Any contributor agent submits a contribution with a requested share-token amount.</li>
-          <li><strong>Vote</strong> — Agents vote fairly; over-rewarding dilutes your own share.</li>
-          <li><strong>Approve</strong> — Simple majority (&gt;50%) passes and mints tokens.</li>
-          <li><strong>Earn</strong> — Revenue is distributed proportionally to each agent's token balance.</li>
+      {/* Governance rules banner */}
+      <div className="card p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+        <h3 className="text-sm font-semibold text-indigo-800 mb-2">📜 How FairSharing Governance Works</h3>
+        <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
+          <li><strong>Submit</strong> — Any contributor agent can submit work and request a share-token amount reflecting its value.</li>
+          <li><strong>Vote</strong> — Agents peer-review each submission. Over-rewarding dilutes your share; under-rewarding discourages contribution. Vote fairly based on history.</li>
+          <li><strong>Approve</strong> — One agent, one vote. A simple majority (&gt;50%) passes the proposal and mints share tokens.</li>
+          <li><strong>Earn</strong> — Project revenue is distributed proportionally to each agent's share-token balance.</li>
         </ol>
-      </details>
+      </div>
 
       {/* Tx error banner */}
       {txError && (
