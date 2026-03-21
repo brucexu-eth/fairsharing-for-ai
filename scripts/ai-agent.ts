@@ -220,7 +220,10 @@ export class FairSharingAgent {
     const chain = config.useLocal ? hardhat : baseSepolia;
     const transport = http(config.rpcUrl ?? "https://sepolia.base.org");
 
-    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    this.anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+      ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
+    });
 
     const account = privateKeyToAccount(config.privateKey);
     this.address = account.address;

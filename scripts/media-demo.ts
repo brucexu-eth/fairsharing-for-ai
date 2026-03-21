@@ -28,7 +28,6 @@
  *   cast call $FS_PROJECT_ADDRESS "rewardToken()(address)" --rpc-url https://sepolia.base.org
  */
 
-import "dotenv/config";
 import { createPublicClient, http, formatUnits } from "viem";
 import { baseSepolia, hardhat } from "viem/chains";
 import { FairSharingAgent } from "./ai-agent";
@@ -145,8 +144,8 @@ async function main() {
     process.exit(1);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("Error: ANTHROPIC_API_KEY must be set in .env");
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+    console.error("Error: ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN must be set in .env");
     process.exit(1);
   }
 
