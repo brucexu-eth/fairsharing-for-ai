@@ -13,6 +13,9 @@
     "agent:vote": "node --loader ts-node/esm scripts/agent-runner.ts vote",
     "agent:round": "node --loader ts-node/esm scripts/agent-runner.ts round"
   },
+  "dependencies": {
+    "viem": "^2.13.5"
+  },
   "devDependencies": {
     "typescript": "^5.4.5"
   }

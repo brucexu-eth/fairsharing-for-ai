@@ -10,21 +10,40 @@
  *   node --loader ts-node/esm scripts/agent-runner.ts round   (submit + vote + execute)
  */
 
-import { createPublicClient, createWalletClient, http, parseEther, keccak256, toBytes } from "viem";
+import { createPublicClient, createWalletClient, http, parseUnits, keccak256, toBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { baseSepolia, hardhat } from "viem/chains";
 
-// TODO: import ABI from @fairsharing/shared after first compile
-const FS_PROJECT_ABI = [] as const; // replace with actual ABI
+const FS_PROJECT_ABI = [
+  { inputs: [{ type: "address" }], name: "addAgent", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ type: "string" }, { type: "string" }, { type: "string" }, { type: "bytes32" }, { type: "uint256" }], name: "submitProposal", outputs: [{ type: "uint256" }], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ type: "uint256" }, { type: "bool" }], name: "vote", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [{ type: "uint256" }], name: "executeProposal", outputs: [], stateMutability: "nonpayable", type: "function" },
+  { inputs: [], name: "proposalCount", outputs: [{ type: "uint256" }], stateMutability: "view", type: "function" },
+  { inputs: [{ type: "uint256" }], name: "getProposal", outputs: [{ type: "uint256" }, { type: "address" }, { type: "string" }, { type: "string" }, { type: "string" }, { type: "bytes32" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint8" }, { type: "uint256" }], stateMutability: "view", type: "function" },
+  { inputs: [{ type: "uint256" }, { type: "address" }], name: "hasVoted", outputs: [{ type: "bool" }], stateMutability: "view", type: "function" },
+  { inputs: [{ type: "address" }], name: "isAgent", outputs: [{ type: "bool" }], stateMutability: "view", type: "function" },
+] as const;
 
-const RPC_URL = process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org";
+const useLocal = process.env.USE_LOCAL === "1";
+const RPC_URL = useLocal
+  ? "http://127.0.0.1:8545"
+  : (process.env.BASE_SEPOLIA_RPC_URL ?? "https://sepolia.base.org");
+const chain = useLocal ? hardhat : baseSepolia;
 const PROJECT_ADDRESS = process.env.FS_PROJECT_ADDRESS as `0x${string}`;
 
+// Hardhat well-known keys as fallback for local dev; override via .env for testnet
+const defaultKeys = [
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", // account #1
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a", // account #2
+  "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6", // account #3
+];
+
 const agentKeys = [
-  process.env.AGENT_1_PRIVATE_KEY,
-  process.env.AGENT_2_PRIVATE_KEY,
-  process.env.AGENT_3_PRIVATE_KEY,
-].filter(Boolean) as string[];
+  process.env.AGENT_1_PRIVATE_KEY ?? defaultKeys[0],
+  process.env.AGENT_2_PRIVATE_KEY ?? defaultKeys[1],
+  process.env.AGENT_3_PRIVATE_KEY ?? defaultKeys[2],
+] as `0x${string}`[];
 
 const agentProfiles = [
   { name: "Agent-Alpha", strategy: "neutral" as const },
@@ -32,31 +51,95 @@ const agentProfiles = [
   { name: "Agent-Gamma", strategy: "aggressive" as const },
 ];
 
-const publicClient = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
+const publicClient = createPublicClient({ chain, transport: http(RPC_URL) });
 
-function getWalletClient(privateKey: string) {
-  const account = privateKeyToAccount(`0x${privateKey.replace("0x", "")}`);
-  return createWalletClient({ account, chain: baseSepolia, transport: http(RPC_URL) });
+function getWalletClient(privateKey: `0x${string}`) {
+  const account = privateKeyToAccount(privateKey);
+  return createWalletClient({ account, chain, transport: http(RPC_URL) });
 }
 
-/** Simple pricing strategy: accept if reward <= 1.2x median of past proposals */
-function shouldApprove(requestedReward: bigint, medianReward: bigint, strategy: string): boolean {
-  const multiplier = strategy === "conservative" ? 1.1 : strategy === "aggressive" ? 1.5 : 1.2;
-  return requestedReward <= BigInt(Math.floor(Number(medianReward) * multiplier));
+const wait = (h: `0x${string}`) => publicClient.waitForTransactionReceipt({ hash: h });
+
+/** Approve if reward <= threshold based on strategy */
+function shouldApprove(requestedReward: bigint, strategy: string): boolean {
+  const thresholds: Record<string, bigint> = {
+    conservative: parseUnits("1500", 18),
+    neutral: parseUnits("2000", 18),
+    aggressive: parseUnits("3000", 18),
+  };
+  return requestedReward <= (thresholds[strategy] ?? parseUnits("2000", 18));
 }
 
 async function submitDemo() {
-  console.log("Submitting demo proposal from Agent-Alpha...");
+  if (!PROJECT_ADDRESS) { console.error("FS_PROJECT_ADDRESS not set"); process.exit(1); }
+  console.log(`Submitting demo proposal from ${agentProfiles[0].name}...`);
   const wallet = getWalletClient(agentKeys[0]);
-  // TODO: uncomment after ABI is available
-  // await wallet.writeContract({ address: PROJECT_ADDRESS, abi: FS_PROJECT_ABI, functionName: "submitProposal", args: [...] });
-  console.log("(stub) submitProposal called");
+  const h = await wallet.writeContract({
+    address: PROJECT_ADDRESS,
+    abi: FS_PROJECT_ABI,
+    functionName: "submitProposal",
+    args: [
+      "Demo Task",
+      "Automated demo proposal from agent-runner",
+      "https://github.com/brucexu-eth/fairsharing-for-ai",
+      keccak256(toBytes(`demo-${Date.now()}`)),
+      parseUnits("1000", 18),
+    ],
+  });
+  await wait(h);
+  console.log("Proposal submitted. tx:", h);
 }
 
 async function voteDemo() {
+  if (!PROJECT_ADDRESS) { console.error("FS_PROJECT_ADDRESS not set"); process.exit(1); }
   console.log("Voting on pending proposals...");
-  // TODO: read proposals, apply strategy, vote
-  console.log("(stub) vote called");
+  const count = await publicClient.readContract({
+    address: PROJECT_ADDRESS,
+    abi: FS_PROJECT_ABI,
+    functionName: "proposalCount",
+  }) as bigint;
+
+  for (let i = 0n; i < count; i++) {
+    const p = await publicClient.readContract({
+      address: PROJECT_ADDRESS,
+      abi: FS_PROJECT_ABI,
+      functionName: "getProposal",
+      args: [i],
+    }) as readonly [bigint, string, string, string, string, `0x${string}`, bigint, bigint, bigint, number, bigint];
+
+    const status = p[9]; // 0=Pending,1=Passed,2=Rejected,3=Executed
+    if (status !== 0) { console.log(`  Proposal #${i}: not pending, skipping`); continue; }
+
+    const reward = p[6];
+    for (let j = 0; j < agentKeys.length; j++) {
+      const wallet = getWalletClient(agentKeys[j]);
+      const voted = await publicClient.readContract({
+        address: PROJECT_ADDRESS,
+        abi: FS_PROJECT_ABI,
+        functionName: "hasVoted",
+        args: [i, wallet.account.address],
+      }) as boolean;
+      if (voted) continue;
+
+      const isAgent = await publicClient.readContract({
+        address: PROJECT_ADDRESS,
+        abi: FS_PROJECT_ABI,
+        functionName: "isAgent",
+        args: [wallet.account.address],
+      }) as boolean;
+      if (!isAgent) continue;
+
+      const support = shouldApprove(reward, agentProfiles[j].strategy);
+      const h = await wallet.writeContract({
+        address: PROJECT_ADDRESS,
+        abi: FS_PROJECT_ABI,
+        functionName: "vote",
+        args: [i, support],
+      });
+      await wait(h);
+      console.log(`  ${agentProfiles[j].name} voted ${support ? "YES" : "NO"} on #${i}`);
+    }
+  }
 }
 
 async function runRound() {
@@ -65,8 +148,14 @@ async function runRound() {
   console.log("Round complete.");
 }
 
+if (!PROJECT_ADDRESS) {
+  console.error("Error: FS_PROJECT_ADDRESS environment variable is required.");
+  console.error("Example: FS_PROJECT_ADDRESS=0x... USE_LOCAL=1 bun scripts/agent-runner.ts round");
+  process.exit(1);
+}
+
 const cmd = process.argv[2];
-if (cmd === "submit") submitDemo();
-else if (cmd === "vote") voteDemo();
-else if (cmd === "round") runRound();
+if (cmd === "submit") await submitDemo();
+else if (cmd === "vote") await voteDemo();
+else if (cmd === "round") await runRound();
 else console.log("Usage: agent-runner.ts <submit|vote|round>");
