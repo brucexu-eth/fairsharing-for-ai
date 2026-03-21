@@ -20,8 +20,8 @@
  *     ANTHROPIC_MODEL             — (optional) defaults to claude-haiku-3-5
  *
  * Usage:
- *   bun scripts/media-demo.ts                  # 3 rounds
- *   bun scripts/media-demo.ts --rounds=5       # custom rounds
+ *   bun scripts/media-demo.ts                  # 5 rounds (default)
+ *   bun scripts/media-demo.ts --rounds=3       # custom rounds
  *   USE_LOCAL=1 bun scripts/media-demo.ts      # against local Hardhat node
  *
  * To get REWARD_TOKEN_ADDRESS:
@@ -137,7 +137,7 @@ async function main() {
   const chain = useLocal ? hardhat : baseSepolia;
 
   const roundsArg = process.argv.find((a) => a.startsWith("--rounds="));
-  const nRounds = roundsArg ? parseInt(roundsArg.split("=")[1]) : 3;
+  const nRounds = roundsArg ? parseInt(roundsArg.split("=")[1]) : 5;
 
   const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
 
@@ -179,6 +179,9 @@ async function main() {
     const results = await Promise.all(
       agents.map((agent) => agent.runTurn().then((r) => ({ name: agent.name, actions: r.actions })))
     );
+
+    // Brief pause between rounds so the public RPC recovers from burst load
+    if (round < nRounds) await new Promise((r) => setTimeout(r, 2000));
 
     for (const { name, actions } of results) {
       console.log(`\n  ${name}`);

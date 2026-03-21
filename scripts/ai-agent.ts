@@ -95,7 +95,7 @@ const TOOLS: Anthropic.Tool[] = [
     name: "submit_contribution",
     description:
       "Submit a new article. Write a focused 400–600-word piece. " +
-      "Most turns request a fair reward; occasionally (≈1 in 3) push 40–70% above your norm to test the group — peers may reject it.",
+      "IMPORTANT: every other submission, request 2–3× your normal range to stress-test governance. Peers WILL reject it — that's the point.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -111,8 +111,8 @@ const TOOLS: Anthropic.Tool[] = [
         requested_reward: {
           type: "number",
           description:
-            "Tokens to request. Normal range: short ~500, standard ~1000, deep-dive ~2000. " +
-            "Occasionally push to 2500–3500 to stress-test — peers will reject if too greedy.",
+            "Tokens to request. Normal: ~500–1500. " +
+            "Inflated test: 3000–5000 — alternate between fair and inflated to demonstrate governance.",
         },
       },
       required: ["title", "summary", "proof_uri", "requested_reward"],
@@ -217,7 +217,11 @@ export class FairSharingAgent {
     this.model = config.model ?? process.env.ANTHROPIC_MODEL ?? "claude-haiku-3-5";
 
     const chain = config.useLocal ? hardhat : baseSepolia;
-    const transport = http(config.rpcUrl ?? "https://sepolia.base.org");
+    const transport = http(config.rpcUrl ?? "https://base-sepolia-rpc.publicnode.com", {
+      retryCount: 5,
+      retryDelay: 1500, // ms between retries on 429 / transient errors
+      timeout: 30_000,
+    });
 
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
@@ -301,8 +305,8 @@ ${this.persona}
 == FairSharing Rules ==
 - Submit articles, request share tokens. Token % = share of platform revenue.
 - Majority vote (>50% of agents) passes; tokens minted on execution.
-- Over-requesting dilutes YOUR OWN share. Vote no on inflated rewards.
-- Occasionally push your reward request 40–70% above normal — peers should (and will) reject it if too greedy.
+- Over-requesting dilutes YOUR OWN share — but testing the system is expected.
+- ALTERNATE: submit at fair price one turn, then push 2–3× the normal price the next. Peers will reject the inflated ones. This demonstrates the self-correcting governance.
 
 == This Turn (priority order) ==
 1. Execute passed contributions to mint tokens
@@ -380,7 +384,9 @@ ${this.persona}
       )
     );
 
-    const pending: ProposalInfo[] = [];
+    // Build base proposal objects and collect pending IDs for batch hasVoted check
+    type BaseProposal = Omit<ProposalInfo, "iVoted">;
+    const pendingBases: BaseProposal[] = [];
     const passed: ProposalInfo[] = [];
 
     for (const p of rawProposals) {
@@ -388,7 +394,7 @@ ${this.persona}
       const strings = stringMap[id.toString()] ?? {
         title: `Contribution #${id}`, summary: "", proofURI: "",
       };
-      const base: ProposalInfo = {
+      const base: BaseProposal = {
         id: Number(id),
         title: strings.title,
         summary: strings.summary,
@@ -398,19 +404,21 @@ ${this.persona}
         yesVotes: Number(yesVotes),
         noVotes: Number(noVotes),
         status,
-        iVoted: false,
       };
-
-      if (status === 0) {
-        const voted = await this.publicClient.readContract({
-          address: this.projectAddress, abi: FS_PROJECT_ABI,
-          functionName: "hasVoted", args: [id, myAddr],
-        }) as boolean;
-        pending.push({ ...base, iVoted: voted });
-      } else if (status === 1) {
-        passed.push(base);
-      }
+      if (status === 0) pendingBases.push(base);
+      else if (status === 1) passed.push({ ...base, iVoted: false });
     }
+
+    // Fetch all hasVoted in parallel (was sequential before)
+    const votedFlags = await Promise.all(
+      pendingBases.map((b) =>
+        this.publicClient.readContract({
+          address: this.projectAddress, abi: FS_PROJECT_ABI,
+          functionName: "hasVoted", args: [BigInt(b.id), myAddr],
+        }) as Promise<boolean>
+      )
+    );
+    const pending: ProposalInfo[] = pendingBases.map((b, i) => ({ ...b, iVoted: votedFlags[i] }));
 
     const myPct = totalSupply > 0n
       ? ((Number(formatUnits(myBalance, 18)) / Number(formatUnits(totalSupply, 18))) * 100).toFixed(1)
