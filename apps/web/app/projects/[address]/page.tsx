@@ -183,19 +183,21 @@ export default function ProjectPage() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <a href="/" className="text-sm text-indigo-600 hover:underline">← All Projects</a>
 
-      {/* Governance rules banner */}
-      <div className="card p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-        <h3 className="text-sm font-semibold text-indigo-800 mb-2">📜 How FairSharing Governance Works</h3>
-        <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
-          <li><strong>Submit</strong> — Any contributor agent can submit a contribution and request a share-token amount reflecting its value.</li>
-          <li><strong>Vote</strong> — Every agent reviews and votes: set the reward too high and your own share dilutes; set it too low and you discourage future contributions. <em>Vote fairly based on historical context.</em></li>
-          <li><strong>Approve</strong> — One agent, one vote. A simple majority (&gt;50%) passes the proposal and mints share tokens.</li>
-          <li><strong>Earn</strong> — When the project receives revenue, rewards are distributed proportionally to each agent's share-token balance.</li>
+      {/* Governance rules banner — collapsible */}
+      <details className="card p-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 group">
+        <summary className="text-xs font-semibold text-indigo-800 cursor-pointer select-none">
+          📜 How FairSharing Governance Works
+        </summary>
+        <ol className="text-xs text-gray-700 mt-2 space-y-1 list-decimal list-inside">
+          <li><strong>Submit</strong> — Any contributor agent submits a contribution with a requested share-token amount.</li>
+          <li><strong>Vote</strong> — Agents vote fairly; over-rewarding dilutes your own share.</li>
+          <li><strong>Approve</strong> — Simple majority (&gt;50%) passes and mints tokens.</li>
+          <li><strong>Earn</strong> — Revenue is distributed proportionally to each agent's token balance.</li>
         </ol>
-      </div>
+      </details>
 
       {/* Tx error banner */}
       {txError && (
@@ -206,24 +208,24 @@ export default function ProjectPage() {
         </div>
       )}
 
-      {/* Project header */}
-      <div className="card p-6">
-        <div className="flex items-start justify-between">
+      {/* Project header — compact */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{projectName ?? "Loading…"}</h1>
-            <div className="mt-1 text-xs text-gray-400 space-y-0.5">
-              <div>Owner: <span className="font-mono">{shortAddr(owner ?? "")}</span></div>
-              <div>Contract: <span className="font-mono">{projectAddress}</span></div>
+            <h1 className="text-xl font-bold text-gray-900 leading-tight">{projectName ?? "Loading…"}</h1>
+            <div className="mt-0.5 text-xs text-gray-400 flex flex-wrap gap-x-3">
+              <span>Owner: <span className="font-mono">{shortAddr(owner ?? "")}</span></span>
+              <span className="hidden sm:inline">Contract: <span className="font-mono">{shortAddr(projectAddress)}</span></span>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-indigo-600">
+          <div className="text-right shrink-0">
+            <div className="text-xl font-bold text-indigo-600 leading-tight">
               {totalSupply !== undefined ? formatToken(totalSupply) : "—"}
+              <span className="text-sm font-normal text-gray-400 ml-1">{tokenSymbol ?? "—"}</span>
             </div>
-            <div className="text-xs text-gray-400">{tokenSymbol ?? "—"} total minted</div>
             {userAddress && myBalance !== undefined && (
-              <div className="text-xs text-gray-500 mt-0.5">
-                Your balance: <strong>{formatToken(myBalance)} {tokenSymbol}</strong>
+              <div className="text-xs text-gray-500">
+                You: <strong>{formatToken(myBalance)}</strong>
                 {totalSupply && totalSupply > 0n && (
                   <span className="text-gray-400 ml-1">
                     ({((Number(formatUnits(myBalance, 18)) / Number(formatUnits(totalSupply, 18))) * 100).toFixed(1)}%)
@@ -232,135 +234,120 @@ export default function ProjectPage() {
               </div>
             )}
             {userAddress && (
-              <div className={`text-xs mt-1 font-medium ${isAgent ? "text-green-600" : "text-gray-400"}`}>
-                {isAgent ? "✓ You are a contributor agent" : "Not a contributor agent"}
+              <div className={`text-xs font-medium ${isAgent ? "text-green-600" : "text-gray-400"}`}>
+                {isAgent ? "✓ contributor agent" : "not an agent"}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column */}
-        <div className="space-y-4">
+      {/* ── Agents + Submit Form: side by side on md+ ─────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 
-          {/* ── Contributor Agents ─────────────────────────────────────────── */}
-          <div className="card p-4">
-            <h2 className="font-semibold text-sm text-gray-700 mb-1">
-              Contributor Agents ({agents?.length ?? 0})
-            </h2>
-            <p className="text-xs text-gray-400 mb-3">
-              Token share % = funding allocation ratio when this project receives external contributions.
-            </p>
+        {/* Contributor Agents */}
+        <div className="card p-4">
+          <h2 className="font-semibold text-sm text-gray-700 mb-0.5">
+            Contributor Agents ({agents?.length ?? 0})
+          </h2>
+          <p className="text-xs text-gray-400 mb-2">
+            Token % = funding allocation ratio when this project receives revenue.
+          </p>
 
-            {sortedAgents.length > 0 ? (
-              <div className="space-y-2">
-                {sortedAgents.map((a) => {
-                  const balRaw = agentBalanceResults?.[agents!.indexOf(a)]?.result as bigint | undefined;
-                  const bal = balRaw ?? 0n;
-                  const pct = totalSupply && totalSupply > 0n
-                    ? (Number(formatUnits(bal, 18)) / Number(formatUnits(totalSupply, 18))) * 100
-                    : 0;
-                  const isMe = a.toLowerCase() === userAddress?.toLowerCase();
-                  return (
-                    <AgentCard
-                      key={a}
-                      address={a}
-                      isMe={isMe}
-                      balance={bal}
-                      pct={pct}
-                      tokenSymbol={tokenSymbol ?? ""}
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 py-2">No contributor agents yet.</p>
-            )}
-
-            {isOwner && (
-              <form onSubmit={handleAddAgent} className="mt-3 space-y-2">
-                <input
-                  className="input text-xs"
-                  placeholder="0x… agent address"
-                  value={newAgent}
-                  onChange={(e) => setNewAgent(e.target.value)}
-                  disabled={isBusy}
-                />
-                <button type="submit" className="btn-primary w-full text-xs" disabled={isBusy || !newAgent.trim()}>
-                  Add Contributor Agent
-                </button>
-              </form>
-            )}
-          </div>
-
-          {/* ── Submit Contribution ────────────────────────────────────────── */}
-          <div className="card p-4">
-            <h2 className="font-semibold text-sm text-gray-700 mb-3">Submit Contribution</h2>
-            {!userAddress ? (
-              <p className="text-xs text-gray-400 py-2">Connect your wallet to submit a contribution.</p>
-            ) : !isAgent ? (
-              <p className="text-xs text-gray-400 py-2">
-                Only contributor agents can submit. Ask the project owner (<span className="font-mono">{shortAddr(owner ?? "")}</span>) to add your address.
-              </p>
-            ) : (
-              <form onSubmit={handleSubmitProposal} className="space-y-2">
-                <div>
-                  <label className="label text-xs">Title</label>
-                  <input className="input text-xs" placeholder="What did you build?" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required disabled={isBusy} />
-                </div>
-                <div>
-                  <label className="label text-xs">Summary</label>
-                  <textarea className="input text-xs resize-none" rows={3} placeholder="Describe what was done and why it's valuable" value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} required disabled={isBusy} />
-                </div>
-                <div>
-                  <label className="label text-xs">Proof URI</label>
-                  <input className="input text-xs" placeholder="GitHub PR, Gist, or Notion link" value={form.proofURI} onChange={(e) => setForm((f) => ({ ...f, proofURI: e.target.value }))} disabled={isBusy} />
-                </div>
-                <div>
-                  <label className="label text-xs">Requested Reward ({tokenSymbol ?? "tokens"})</label>
-                  <input className="input text-xs" type="number" min="0" step="1" placeholder="1000" value={form.reward} onChange={(e) => setForm((f) => ({ ...f, reward: e.target.value }))} required disabled={isBusy} />
-                </div>
-                <div>
-                  <label className="label text-xs">Reward Recipient <span className="text-gray-400">(optional — defaults to you)</span></label>
-                  <input className="input text-xs font-mono" placeholder="0x… leave blank to receive yourself" value={form.beneficiary} onChange={(e) => setForm((f) => ({ ...f, beneficiary: e.target.value }))} disabled={isBusy} />
-                </div>
-                <button type="submit" className="btn-primary w-full text-xs" disabled={isBusy || !form.title || !form.reward}>
-                  {isPending ? "Confirm in wallet…" : isConfirming ? "Submitting…" : "Submit Contribution"}
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-
-        {/* Right column: contributions */}
-        <div className="lg:col-span-2 space-y-3">
-          <h2 className="font-semibold text-gray-700">Contributions ({count})</h2>
-
-          {count === 0 && (
-            <div className="card p-8 text-center text-gray-400 text-sm">
-              No contributions yet. Submit one on the left.
+          {sortedAgents.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {sortedAgents.map((a) => {
+                const balRaw = agentBalanceResults?.[agents!.indexOf(a)]?.result as bigint | undefined;
+                const bal = balRaw ?? 0n;
+                const pct = totalSupply && totalSupply > 0n
+                  ? (Number(formatUnits(bal, 18)) / Number(formatUnits(totalSupply, 18))) * 100
+                  : 0;
+                const isMe = a.toLowerCase() === userAddress?.toLowerCase();
+                return (
+                  <AgentCard
+                    key={a}
+                    address={a}
+                    isMe={isMe}
+                    balance={bal}
+                    pct={pct}
+                    tokenSymbol={tokenSymbol ?? ""}
+                  />
+                );
+              })}
             </div>
+          ) : (
+            <p className="text-xs text-gray-400 py-1">No contributor agents yet.</p>
           )}
 
-          {proposalResults?.map((result) => {
-            if (result.status !== "success" || !result.result) return null;
-            const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] = result.result;
-            const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
-            return (
-              <ContributionCard
-                key={id.toString()}
-                id={id} proposer={proposer} beneficiary={beneficiary}
-                title={strings.title} summary={strings.summary} proofURI={strings.proofURI}
-                requestedReward={requestedReward} yesVotes={yesVotes} noVotes={noVotes}
-                status={Number(status)} createdAt={createdAt}
-                projectAddress={projectAddress} isAgent={isAgent} userAddress={userAddress}
-                isBusy={isBusy} onWrite={(args) => writeContract(args)}
-                tokenSymbol={tokenSymbol ?? "tokens"} totalAgents={agents?.length ?? 0}
+          {isOwner && (
+            <form onSubmit={handleAddAgent} className="mt-3 flex gap-2">
+              <input
+                className="input text-xs flex-1"
+                placeholder="0x… agent address"
+                value={newAgent}
+                onChange={(e) => setNewAgent(e.target.value)}
+                disabled={isBusy}
               />
-            );
-          })}
+              <button type="submit" className="btn-primary text-xs px-3 shrink-0" disabled={isBusy || !newAgent.trim()}>
+                Add
+              </button>
+            </form>
+          )}
         </div>
+
+        {/* Submit Contribution */}
+        <div className="card p-4">
+          <h2 className="font-semibold text-sm text-gray-700 mb-2">Submit Contribution</h2>
+          {!userAddress ? (
+            <p className="text-xs text-gray-400 py-1">Connect your wallet to submit a contribution.</p>
+          ) : !isAgent ? (
+            <p className="text-xs text-gray-400 py-1">
+              Only contributor agents can submit. Ask the owner (<span className="font-mono">{shortAddr(owner ?? "")}</span>) to add your address.
+            </p>
+          ) : (
+            <form onSubmit={handleSubmitProposal} className="space-y-2">
+              <input className="input text-xs" placeholder="Title — what did you build?" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required disabled={isBusy} />
+              <textarea className="input text-xs resize-none" rows={2} placeholder="Summary — describe what was done and why it's valuable" value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} required disabled={isBusy} />
+              <input className="input text-xs" placeholder="Proof URI — GitHub PR, Gist, or Notion link" value={form.proofURI} onChange={(e) => setForm((f) => ({ ...f, proofURI: e.target.value }))} disabled={isBusy} />
+              <div className="flex gap-2">
+                <input className="input text-xs flex-1" type="number" min="0" step="1" placeholder={`Reward (${tokenSymbol ?? "tokens"})`} value={form.reward} onChange={(e) => setForm((f) => ({ ...f, reward: e.target.value }))} required disabled={isBusy} />
+                <input className="input text-xs flex-1 font-mono" placeholder="Recipient 0x… (optional)" value={form.beneficiary} onChange={(e) => setForm((f) => ({ ...f, beneficiary: e.target.value }))} disabled={isBusy} />
+              </div>
+              <button type="submit" className="btn-primary w-full text-xs" disabled={isBusy || !form.title || !form.reward}>
+                {isPending ? "Confirm in wallet…" : isConfirming ? "Submitting…" : "Submit Contribution"}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* ── Contributions ─────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <h2 className="font-semibold text-sm text-gray-700">Contributions ({count})</h2>
+
+        {count === 0 && (
+          <div className="card p-6 text-center text-gray-400 text-sm">
+            No contributions yet.
+          </div>
+        )}
+
+        {proposalResults?.map((result) => {
+          if (result.status !== "success" || !result.result) return null;
+          const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] = result.result;
+          const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
+          return (
+            <ContributionCard
+              key={id.toString()}
+              id={id} proposer={proposer} beneficiary={beneficiary}
+              title={strings.title} summary={strings.summary} proofURI={strings.proofURI}
+              requestedReward={requestedReward} yesVotes={yesVotes} noVotes={noVotes}
+              status={Number(status)} createdAt={createdAt}
+              projectAddress={projectAddress} isAgent={isAgent} userAddress={userAddress}
+              isBusy={isBusy} onWrite={(args) => writeContract(args)}
+              tokenSymbol={tokenSymbol ?? "tokens"} totalAgents={agents?.length ?? 0}
+            />
+          );
+        })}
       </div>
     </div>
   );
