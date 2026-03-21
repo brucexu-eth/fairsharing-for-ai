@@ -1,0 +1,19 @@
+{
+  "name": "fairsharing-for-ai",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter './apps/*' dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test",
+    "agent:submit": "node --loader ts-node/esm scripts/agent-runner.ts submit",
+    "agent:vote": "node --loader ts-node/esm scripts/agent-runner.ts vote",
+    "agent:round": "node --loader ts-node/esm scripts/agent-runner.ts round"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

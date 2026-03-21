@@ -1,0 +1,18 @@
+{
+  "name": "@fairsharing/contracts",
+  "private": true,
+  "scripts": {
+    "build": "bun hardhat compile",
+    "test": "bun hardhat test",
+    "deploy:local": "bun hardhat ignition deploy ./ignition/modules/FSProjectFactory.ts --network localhost",
+    "deploy:base-sepolia": "bun hardhat ignition deploy ./ignition/modules/FSProjectFactory.ts --network base-sepolia",
+    "deploy:base": "bun hardhat ignition deploy ./ignition/modules/FSProjectFactory.ts --network base"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}

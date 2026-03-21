@@ -266,7 +266,7 @@ MVP 阶段不解决女巫攻击与开放治理问题，因此采用白名单 Age
 
 MVP 不做真正自治 Agent 网络，只做一个最简单的本地 / server-side runner：
 
-- 预置 3–5 个测试私钥（仅限 Sepolia demo）
+- 预置 3–5 个测试私钥（仅限 Base Sepolia demo，绝不使用真实资金）
 - 每个 Agent 有一个简单策略：
   - 如果历史相似任务报价在可接受区间，则 approve
   - 如果 requestedReward 明显高于历史中位数，则 reject
@@ -280,7 +280,7 @@ MVP 不做真正自治 Agent 网络，只做一个最简单的本地 / server-si
 
 - **简单优先**：优先减少模块数量
 - **可演示**：前端必须清楚展示“提交 → 投票 → mint”流程
-- **可重复部署**：支持本地和 Sepolia
+- **可重复部署**：支持本地和 Base Sepolia
 - **可读性**：合约结构简单，便于现场讲解
 - **低耦合**：AI 策略与合约规则分离
 
@@ -303,6 +303,24 @@ MVP 不做真正自治 Agent 网络，只做一个最简单的本地 / server-si
 ### 8.4 为什么暂时不做 AA 钱包
 
 真正的智能账户、session key、自动签名是合理方向，但不适合作为首版依赖。MVP 先使用受控测试钱包模拟 Agent 自动执行，先证明机制成立。
+
+### 8.5 ERC-8004 集成策略
+
+FairSharing AI 参与了 "Agents With Receipts — ERC-8004" 赛道，因此 FSProject 在 `addAgent()` 时会调用 ERC-8004 identity registry 验证 Agent 地址是否拥有链上身份。
+
+集成方式：
+- `FSProject` 构造函数接收 `erc8004Registry` 地址
+- `addAgent(address)` 调用 `IERC8004Registry.isRegistered(agent)` 验证
+- 若 `erc8004Registry == address(0)`，跳过验证（本地开发 / 测试网）
+- FSProjectFactory 将 registry 地址传递给每个新建的 FSProject
+
+这样既满足赛道要求（Agent 白名单与 ERC-8004 身份绑定），又不影响本地开发与测试流程。
+
+### 8.6 提案投票规则
+
+- 无 deadline，提案永久有效直到投票结果确定
+- 投票实时结算：达到 `yesVotes > N/2` 立即 Passed，`noVotes > N/2` 立即 Rejected
+- Agent 数量通常 3–5 个，不存在治理冷漠问题，无需超时机制
 
 ---
 
@@ -363,7 +381,7 @@ fairsharing-ai/
 │  └─ agent-runner.ts          # 本地 Agent 模拟脚本
 ├─ .env.example
 ├─ package.json
-├─ pnpm-workspace.yaml
+├─ package.json          # bun workspace root
 └─ README.md
 ```
 
@@ -404,9 +422,9 @@ apps/web/
 
 ### 11.1 Monorepo
 
-**pnpm workspace**
+**bun workspace**
 
-理由：轻量、简单、适合前端与合约共享 ABI/types。
+理由：轻量、简单、适合前端与合约共享 ABI/types。Package manager 使用 bun，runtime 使用 Node.js。
 
 ### 11.2 前端
 
@@ -440,12 +458,13 @@ apps/web/
 
 ### 11.5 网络
 
-**Sepolia**
+**Base（Base Sepolia 测试网，主网备选）**
 
 理由：
 
-- 适合应用和合约开发测试
-- 生态工具与 RPC 支持成熟
+- 黑客松 "Agent Services on Base" 赛道要求部署在 Base
+- Base Sepolia 适合开发和演示，gas 费低
+- 工具链与 Sepolia 完全兼容，只需改 chainId
 
 ---
 
@@ -515,9 +534,9 @@ MVP 不做完整后端 API，只保留两个可选能力：
 
 也可以完全不用 API，只提供：
 
-- `pnpm agent:submit`
-- `pnpm agent:vote`
-- `pnpm agent:round`
+- `bun agent:submit`
+- `bun agent:vote`
+- `bun agent:round`
 
 对于黑客松，CLI 脚本通常比 API 更稳。
 
@@ -562,7 +581,7 @@ MVP 不做完整后端 API，只保留两个可选能力：
 
 必须满足：
 
-- 能在 Sepolia 创建项目
+- 能在 Base Sepolia 创建项目
 - 能成功提交 proposal
 - 能由多个 Agent 成功投票
 - 能在通过后 mint token 给 proposer
@@ -597,7 +616,7 @@ MVP 不做完整后端 API，只保留两个可选能力：
 
 - 预置 Agent 钱包
 - 一键模拟 3 个场景
-- Sepolia 部署完成
+- Base Sepolia 部署完成
 
 ---
 
@@ -612,7 +631,7 @@ MVP 不做完整后端 API，只保留两个可选能力：
 - 提交 proposal
 - 投票
 - execute mint
-- Sepolia 部署
+- Base Sepolia 部署
 
 ### P1
 
@@ -661,7 +680,7 @@ README 首页建议直接写：
 3. How it works
 4. Repo structure
 5. Local development
-6. Deploy to Sepolia
+6. Deploy to Base Sepolia
 7. Demo scenarios
 
 ---
@@ -694,7 +713,7 @@ This MVP demonstrates a minimal closed loop for:
    - submit proposal
    - majority vote pass
    - execute mint
-4. 部署到 Sepolia
+4. 部署到 Base Sepolia
 5. 前端先只做项目详情页
 
 只要这一步完成，你就已经有一个能讲的黑客松原型了。
