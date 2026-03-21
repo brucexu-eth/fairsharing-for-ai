@@ -15,9 +15,10 @@ import { FS_PROJECT_ABI, REWARD_TOKEN_ABI, PROPOSAL_SUBMITTED_EVENT } from "@/li
 import { shortAddr, formatToken, timeAgo } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 
+const POLL_MS = 10_000; // auto-refresh interval
+
 type ProposalStrings = { title: string; summary: string; proofURI: string };
 
-/** Fetch ProposalSubmitted logs, respecting RPC 10k-block limit. */
 async function fetchProposalLogs(
   client: ReturnType<typeof usePublicClient>,
   projectAddress: `0x${string}`,
@@ -49,56 +50,59 @@ export default function ProjectPage() {
   const publicClient = usePublicClient();
   const projectAddress = address as `0x${string}`;
 
-  // ── Project info ───────────────────────────────────────────────────────────
+  // ── Project info (auto-refresh) ────────────────────────────────────────────
   const { data: projectName } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "name",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "name",
   });
   const { data: owner } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "owner",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "owner",
   });
   const { data: rewardTokenAddr } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "rewardToken",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "rewardToken",
   });
   const { data: agents, refetch: refetchAgents } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "getAgents",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "getAgents",
+    query: { refetchInterval: POLL_MS },
   });
   const { data: proposalCount, refetch: refetchCount } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "proposalCount",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "proposalCount",
+    query: { refetchInterval: POLL_MS },
   });
   const { data: tokenSymbol } = useReadContract({
-    address: rewardTokenAddr,
-    abi: REWARD_TOKEN_ABI,
-    functionName: "symbol",
+    address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "symbol",
     query: { enabled: !!rewardTokenAddr },
   });
-  const { data: totalSupply } = useReadContract({
-    address: rewardTokenAddr,
-    abi: REWARD_TOKEN_ABI,
-    functionName: "totalSupply",
-    query: { enabled: !!rewardTokenAddr },
+  const { data: totalSupply, refetch: refetchSupply } = useReadContract({
+    address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "totalSupply",
+    query: { enabled: !!rewardTokenAddr, refetchInterval: POLL_MS },
   });
   const { data: myBalance, refetch: refetchBalance } = useReadContract({
-    address: rewardTokenAddr,
-    abi: REWARD_TOKEN_ABI,
-    functionName: "balanceOf",
+    address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "balanceOf",
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: !!rewardTokenAddr && !!userAddress },
+    query: { enabled: !!rewardTokenAddr && !!userAddress, refetchInterval: POLL_MS },
   });
 
-  const isOwner = userAddress && owner && userAddress.toLowerCase() === owner.toLowerCase();
-  const isAgent = userAddress && agents?.some((a) => a.toLowerCase() === userAddress.toLowerCase());
+  // Direct on-chain isAgent check (authoritative — avoids stale array issues)
+  const { data: isAgentOnChain } = useReadContract({
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "isAgent",
+    args: userAddress ? [userAddress] : undefined,
+    query: { enabled: !!userAddress, refetchInterval: POLL_MS },
+  });
+  const isOwner = !!(userAddress && owner && userAddress.toLowerCase() === owner.toLowerCase());
+  const isAgent = !!isAgentOnChain;
 
-  // ── Read proposals (on-chain state) ────────────────────────────────────────
+  // ── Agent balances (batched) ────────────────────────────────────────────────
+  const { data: agentBalanceResults, refetch: refetchAgentBalances } = useReadContracts({
+    contracts: (agents ?? []).map((a) => ({
+      address: rewardTokenAddr!,
+      abi: REWARD_TOKEN_ABI,
+      functionName: "balanceOf" as const,
+      args: [a] as const,
+    })),
+    query: { enabled: !!rewardTokenAddr && !!agents?.length, refetchInterval: POLL_MS },
+  });
+
+  // ── Read proposals (auto-refresh) ─────────────────────────────────────────
   const count = Number(proposalCount ?? 0);
   const { data: proposalResults, refetch: refetchProposals } = useReadContracts({
     contracts: Array.from({ length: count }, (_, i) => ({
@@ -107,11 +111,10 @@ export default function ProjectPage() {
       functionName: "getProposal" as const,
       args: [BigInt(i)] as const,
     })),
-    query: { enabled: count > 0 },
+    query: { enabled: count > 0, refetchInterval: POLL_MS },
   });
 
-  // ── Fetch string data from ProposalSubmitted events ─────────────────────────
-  // title, summary, proofURI are stored in events only (gas optimisation).
+  // ── Fetch ProposalSubmitted event strings ──────────────────────────────────
   const [proposalStrings, setProposalStrings] = useState<Record<string, ProposalStrings>>({});
   useEffect(() => {
     if (!publicClient) return;
@@ -121,25 +124,29 @@ export default function ProjectPage() {
   }, [publicClient, projectAddress, count]);
 
   // ── Write contract ─────────────────────────────────────────────────────────
-  const { writeContract, data: txHash, isPending, reset: resetWrite } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const [txError, setTxError] = useState<string | null>(null);
+  const { writeContract: _write, data: txHash, isPending, reset: resetWrite } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isTxSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+
+  function writeContract(args: any) {
+    setTxError(null);
+    _write(args, {
+      onError: (e: any) => {
+        setTxError(e.shortMessage ?? e.message ?? String(e));
+        console.error("tx error:", e);
+      },
+    });
+  }
 
   const refetchAll = () => {
-    refetchAgents();
-    refetchCount();
-    refetchProposals();
-    refetchBalance();
-    resetWrite();
-    // Re-fetch event logs on next render
-    if (publicClient) {
+    refetchAgents(); refetchCount(); refetchProposals();
+    refetchBalance(); refetchSupply(); refetchAgentBalances();
+    resetWrite(); setTxError(null);
+    if (publicClient)
       fetchProposalLogs(publicClient, projectAddress)
         .then((logs) => setProposalStrings(logsToStrings(logs)))
         .catch(console.error);
-    }
   };
-
   if (isTxSuccess) refetchAll();
 
   // ── Add agent ──────────────────────────────────────────────────────────────
@@ -147,34 +154,19 @@ export default function ProjectPage() {
   function handleAddAgent(e: React.FormEvent) {
     e.preventDefault();
     if (!newAgent.trim()) return;
-    writeContract({
-      address: projectAddress,
-      abi: FS_PROJECT_ABI,
-      functionName: "addAgent",
-      args: [newAgent.trim() as `0x${string}`],
-    });
+    writeContract({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "addAgent", args: [newAgent.trim() as `0x${string}`] });
     setNewAgent("");
   }
 
-  // ── Submit proposal ────────────────────────────────────────────────────────
-  const [form, setForm] = useState({
-    title: "",
-    summary: "",
-    proofURI: "",
-    reward: "",
-    beneficiary: "",
-  });
+  // ── Submit contribution ────────────────────────────────────────────────────
+  const [form, setForm] = useState({ title: "", summary: "", proofURI: "", reward: "", beneficiary: "" });
   function handleSubmitProposal(e: React.FormEvent) {
     e.preventDefault();
     const beneficiary = form.beneficiary.trim() as `0x${string}` | "";
     writeContract({
-      address: projectAddress,
-      abi: FS_PROJECT_ABI,
-      functionName: "submitProposal",
+      address: projectAddress, abi: FS_PROJECT_ABI, functionName: "submitProposal",
       args: [
-        form.title,
-        form.summary,
-        form.proofURI,
+        form.title, form.summary, form.proofURI,
         keccak256(toBytes(form.proofURI || form.title)),
         parseUnits(form.reward || "0", 18),
         (beneficiary || "0x0000000000000000000000000000000000000000") as `0x${string}`,
@@ -185,12 +177,34 @@ export default function ProjectPage() {
 
   const isBusy = isPending || isConfirming;
 
+  // Sorted agents: current user first
+  const sortedAgents = agents
+    ? [...agents].sort((a) => (a.toLowerCase() === userAddress?.toLowerCase() ? -1 : 1))
+    : [];
+
   return (
     <div className="space-y-6">
-      {/* Back */}
-      <a href="/" className="text-sm text-indigo-600 hover:underline">
-        ← All Projects
-      </a>
+      <a href="/" className="text-sm text-indigo-600 hover:underline">← All Projects</a>
+
+      {/* Governance rules banner */}
+      <div className="card p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+        <h3 className="text-sm font-semibold text-indigo-800 mb-2">📜 How FairSharing Governance Works</h3>
+        <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
+          <li><strong>Submit</strong> — Any contributor agent can submit a contribution and request a share-token amount reflecting its value.</li>
+          <li><strong>Vote</strong> — Every agent reviews and votes: set the reward too high and your own share dilutes; set it too low and you discourage future contributions. <em>Vote fairly based on historical context.</em></li>
+          <li><strong>Approve</strong> — One agent, one vote. A simple majority (&gt;50%) passes the proposal and mints share tokens.</li>
+          <li><strong>Earn</strong> — When the project receives revenue, rewards are distributed proportionally to each agent's share-token balance.</li>
+        </ol>
+      </div>
+
+      {/* Tx error banner */}
+      {txError && (
+        <div className="card p-3 bg-red-50 border-red-200 text-red-700 text-sm flex items-start gap-2">
+          <span className="font-semibold shrink-0">Transaction failed:</span>
+          <span className="break-all">{txError}</span>
+          <button className="ml-auto shrink-0 text-red-400 hover:text-red-600" onClick={() => setTxError(null)}>✕</button>
+        </div>
+      )}
 
       {/* Project header */}
       <div className="card p-6">
@@ -210,6 +224,16 @@ export default function ProjectPage() {
             {userAddress && myBalance !== undefined && (
               <div className="text-xs text-gray-500 mt-0.5">
                 Your balance: <strong>{formatToken(myBalance)} {tokenSymbol}</strong>
+                {totalSupply && totalSupply > 0n && (
+                  <span className="text-gray-400 ml-1">
+                    ({((Number(formatUnits(myBalance, 18)) / Number(formatUnits(totalSupply, 18))) * 100).toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+            )}
+            {userAddress && (
+              <div className={`text-xs mt-1 font-medium ${isAgent ? "text-green-600" : "text-gray-400"}`}>
+                {isAgent ? "✓ You are a contributor agent" : "Not a contributor agent"}
               </div>
             )}
           </div>
@@ -217,27 +241,41 @@ export default function ProjectPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: agents + forms */}
+        {/* Left column */}
         <div className="space-y-4">
-          {/* Contributor Agents */}
+
+          {/* ── Contributor Agents ─────────────────────────────────────────── */}
           <div className="card p-4">
-            <h2 className="font-semibold text-sm text-gray-700 mb-3">
+            <h2 className="font-semibold text-sm text-gray-700 mb-1">
               Contributor Agents ({agents?.length ?? 0})
             </h2>
-            {agents && agents.length > 0 ? (
-              <ul className="space-y-1">
-                {agents.map((a) => (
-                  <li key={a} className="text-xs font-mono text-gray-600 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
-                    {shortAddr(a)}
-                    {a.toLowerCase() === userAddress?.toLowerCase() && (
-                      <span className="text-indigo-500 ml-1">(you)</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+            <p className="text-xs text-gray-400 mb-3">
+              Token share % = funding allocation ratio when this project receives external contributions.
+            </p>
+
+            {sortedAgents.length > 0 ? (
+              <div className="space-y-2">
+                {sortedAgents.map((a) => {
+                  const balRaw = agentBalanceResults?.[agents!.indexOf(a)]?.result as bigint | undefined;
+                  const bal = balRaw ?? 0n;
+                  const pct = totalSupply && totalSupply > 0n
+                    ? (Number(formatUnits(bal, 18)) / Number(formatUnits(totalSupply, 18))) * 100
+                    : 0;
+                  const isMe = a.toLowerCase() === userAddress?.toLowerCase();
+                  return (
+                    <AgentCard
+                      key={a}
+                      address={a}
+                      isMe={isMe}
+                      balance={bal}
+                      pct={pct}
+                      tokenSymbol={tokenSymbol ?? ""}
+                    />
+                  );
+                })}
+              </div>
             ) : (
-              <p className="text-xs text-gray-400">No contributor agents yet.</p>
+              <p className="text-xs text-gray-400 py-2">No contributor agents yet.</p>
             )}
 
             {isOwner && (
@@ -256,14 +294,11 @@ export default function ProjectPage() {
             )}
           </div>
 
-          {/* Submit Contribution — always visible, locked state when not eligible */}
+          {/* ── Submit Contribution ────────────────────────────────────────── */}
           <div className="card p-4">
             <h2 className="font-semibold text-sm text-gray-700 mb-3">Submit Contribution</h2>
-
             {!userAddress ? (
-              <p className="text-xs text-gray-400 py-2">
-                Connect your wallet to submit a contribution.
-              </p>
+              <p className="text-xs text-gray-400 py-2">Connect your wallet to submit a contribution.</p>
             ) : !isAgent ? (
               <p className="text-xs text-gray-400 py-2">
                 Only contributor agents can submit. Ask the project owner (<span className="font-mono">{shortAddr(owner ?? "")}</span>) to add your address.
@@ -272,66 +307,25 @@ export default function ProjectPage() {
               <form onSubmit={handleSubmitProposal} className="space-y-2">
                 <div>
                   <label className="label text-xs">Title</label>
-                  <input
-                    className="input text-xs"
-                    placeholder="What did you build?"
-                    value={form.title}
-                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                    required
-                    disabled={isBusy}
-                  />
+                  <input className="input text-xs" placeholder="What did you build?" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} required disabled={isBusy} />
                 </div>
                 <div>
                   <label className="label text-xs">Summary</label>
-                  <textarea
-                    className="input text-xs resize-none"
-                    rows={3}
-                    placeholder="Describe what was done and why it's valuable"
-                    value={form.summary}
-                    onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
-                    required
-                    disabled={isBusy}
-                  />
+                  <textarea className="input text-xs resize-none" rows={3} placeholder="Describe what was done and why it's valuable" value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} required disabled={isBusy} />
                 </div>
                 <div>
                   <label className="label text-xs">Proof URI</label>
-                  <input
-                    className="input text-xs"
-                    placeholder="GitHub PR, Gist, or Notion link"
-                    value={form.proofURI}
-                    onChange={(e) => setForm((f) => ({ ...f, proofURI: e.target.value }))}
-                    disabled={isBusy}
-                  />
+                  <input className="input text-xs" placeholder="GitHub PR, Gist, or Notion link" value={form.proofURI} onChange={(e) => setForm((f) => ({ ...f, proofURI: e.target.value }))} disabled={isBusy} />
                 </div>
                 <div>
                   <label className="label text-xs">Requested Reward ({tokenSymbol ?? "tokens"})</label>
-                  <input
-                    className="input text-xs"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="1000"
-                    value={form.reward}
-                    onChange={(e) => setForm((f) => ({ ...f, reward: e.target.value }))}
-                    required
-                    disabled={isBusy}
-                  />
+                  <input className="input text-xs" type="number" min="0" step="1" placeholder="1000" value={form.reward} onChange={(e) => setForm((f) => ({ ...f, reward: e.target.value }))} required disabled={isBusy} />
                 </div>
                 <div>
                   <label className="label text-xs">Reward Recipient <span className="text-gray-400">(optional — defaults to you)</span></label>
-                  <input
-                    className="input text-xs font-mono"
-                    placeholder="0x… leave blank to receive yourself"
-                    value={form.beneficiary}
-                    onChange={(e) => setForm((f) => ({ ...f, beneficiary: e.target.value }))}
-                    disabled={isBusy}
-                  />
+                  <input className="input text-xs font-mono" placeholder="0x… leave blank to receive yourself" value={form.beneficiary} onChange={(e) => setForm((f) => ({ ...f, beneficiary: e.target.value }))} disabled={isBusy} />
                 </div>
-                <button
-                  type="submit"
-                  className="btn-primary w-full text-xs"
-                  disabled={isBusy || !form.title || !form.reward}
-                >
+                <button type="submit" className="btn-primary w-full text-xs" disabled={isBusy || !form.title || !form.reward}>
                   {isPending ? "Confirm in wallet…" : isConfirming ? "Submitting…" : "Submit Contribution"}
                 </button>
               </form>
@@ -341,9 +335,7 @@ export default function ProjectPage() {
 
         {/* Right column: contributions */}
         <div className="lg:col-span-2 space-y-3">
-          <h2 className="font-semibold text-gray-700">
-            Contributions ({count})
-          </h2>
+          <h2 className="font-semibold text-gray-700">Contributions ({count})</h2>
 
           {count === 0 && (
             <div className="card p-8 text-center text-gray-400 text-sm">
@@ -353,32 +345,18 @@ export default function ProjectPage() {
 
           {proposalResults?.map((result) => {
             if (result.status !== "success" || !result.result) return null;
-            // getProposal now returns: [id, proposer, beneficiary, proofHash, requestedReward, yesVotes, noVotes, status, createdAt]
-            const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] =
-              result.result;
+            const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] = result.result;
             const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
-
             return (
-              <ProposalCard
+              <ContributionCard
                 key={id.toString()}
-                id={id}
-                proposer={proposer}
-                beneficiary={beneficiary}
-                title={strings.title}
-                summary={strings.summary}
-                proofURI={strings.proofURI}
-                requestedReward={requestedReward}
-                yesVotes={yesVotes}
-                noVotes={noVotes}
-                status={Number(status)}
-                createdAt={createdAt}
-                projectAddress={projectAddress}
-                isAgent={!!isAgent}
-                userAddress={userAddress}
-                isBusy={isBusy}
-                onWrite={(args) => writeContract(args)}
-                tokenSymbol={tokenSymbol ?? "tokens"}
-                totalAgents={agents?.length ?? 0}
+                id={id} proposer={proposer} beneficiary={beneficiary}
+                title={strings.title} summary={strings.summary} proofURI={strings.proofURI}
+                requestedReward={requestedReward} yesVotes={yesVotes} noVotes={noVotes}
+                status={Number(status)} createdAt={createdAt}
+                projectAddress={projectAddress} isAgent={isAgent} userAddress={userAddress}
+                isBusy={isBusy} onWrite={(args) => writeContract(args)}
+                tokenSymbol={tokenSymbol ?? "tokens"} totalAgents={agents?.length ?? 0}
               />
             );
           })}
@@ -388,9 +366,68 @@ export default function ProjectPage() {
   );
 }
 
-// ── ProposalCard ───────────────────────────────────────────────────────────────
+// ── AgentCard ─────────────────────────────────────────────────────────────────
 
-function ProposalCard({
+function AgentCard({ address, isMe, balance, pct, tokenSymbol }: {
+  address: string; isMe: boolean; balance: bigint; pct: number;
+  tokenSymbol: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className={`rounded-lg border p-3 space-y-2 ${isMe ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+          <button
+            className="text-xs font-mono text-gray-700 hover:text-indigo-600 text-left truncate"
+            onClick={() => setExpanded((v) => !v)}
+            title="Click to expand address"
+          >
+            {expanded ? address : shortAddr(address)}
+          </button>
+          {isMe && <span className="text-xs text-indigo-500 font-medium shrink-0">you</span>}
+        </div>
+        <button
+          className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
+          onClick={copy}
+          title="Copy address"
+        >
+          {copied ? "✓" : "copy"}
+        </button>
+      </div>
+
+      {/* Share bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-600 font-medium">
+            {formatToken(balance)} {tokenSymbol}
+          </span>
+          <span className={`font-semibold ${pct > 0 ? "text-indigo-600" : "text-gray-400"}`}>
+            {pct.toFixed(1)}%
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className="h-full bg-indigo-400 rounded-full transition-all"
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ContributionCard ──────────────────────────────────────────────────────────
+
+function ContributionCard({
   id, proposer, beneficiary, title, summary, proofURI, requestedReward,
   yesVotes, noVotes, status, createdAt,
   projectAddress, isAgent, userAddress, isBusy, onWrite, tokenSymbol, totalAgents,
@@ -398,16 +435,13 @@ function ProposalCard({
   id: bigint; proposer: string; beneficiary: string; title: string; summary: string; proofURI: string;
   requestedReward: bigint; yesVotes: bigint; noVotes: bigint; status: number;
   createdAt: bigint; projectAddress: `0x${string}`; isAgent: boolean;
-  userAddress?: string; isBusy: boolean;
-  onWrite: (args: any) => void;
+  userAddress?: string; isBusy: boolean; onWrite: (args: any) => void;
   tokenSymbol: string; totalAgents: number;
 }) {
   const { data: alreadyVoted } = useReadContract({
-    address: projectAddress,
-    abi: FS_PROJECT_ABI,
-    functionName: "hasVoted",
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "hasVoted",
     args: userAddress ? [id, userAddress as `0x${string}`] : undefined,
-    query: { enabled: !!userAddress },
+    query: { enabled: !!userAddress, refetchInterval: POLL_MS },
   });
 
   const canVote = isAgent && status === 0 && !alreadyVoted;
@@ -420,29 +454,25 @@ function ProposalCard({
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 font-mono">#{id.toString()}</span>
             <StatusBadge status={status} />
+            {isAgent && status === 0 && alreadyVoted && (
+              <span className="text-xs text-gray-400">(voted)</span>
+            )}
           </div>
           <h3 className="font-semibold text-gray-900">{title}</h3>
           {summary && <p className="text-sm text-gray-600 whitespace-pre-wrap">{summary}</p>}
           {proofURI && (
-            <a
-              href={proofURI}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:underline break-all"
-            >
+            <a href={proofURI} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:underline break-all">
               {proofURI} ↗
             </a>
           )}
         </div>
         <div className="text-right shrink-0">
-          <div className="text-lg font-bold text-indigo-600">
-            {formatToken(requestedReward)}
-          </div>
+          <div className="text-lg font-bold text-indigo-600">{formatToken(requestedReward)}</div>
           <div className="text-xs text-gray-400">{tokenSymbol}</div>
         </div>
       </div>
 
-      {/* Vote bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-gray-500">
           <span>{yesVotes.toString()} yes / {noVotes.toString()} no</span>
@@ -450,14 +480,8 @@ function ProposalCard({
         </div>
         {totalAgents > 0 && (
           <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
-            <div
-              className="bg-green-400 h-full transition-all"
-              style={{ width: `${(Number(yesVotes) / totalAgents) * 100}%` }}
-            />
-            <div
-              className="bg-red-400 h-full transition-all"
-              style={{ width: `${(Number(noVotes) / totalAgents) * 100}%` }}
-            />
+            <div className="bg-green-400 h-full transition-all" style={{ width: `${(Number(yesVotes) / totalAgents) * 100}%` }} />
+            <div className="bg-red-400 h-full transition-all" style={{ width: `${(Number(noVotes) / totalAgents) * 100}%` }} />
           </div>
         )}
       </div>
@@ -465,57 +489,24 @@ function ProposalCard({
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-400 space-y-0.5">
           <div>by {shortAddr(proposer)} · {timeAgo(createdAt)}</div>
-          {showBeneficiary && (
-            <div>reward → <span className="font-mono">{shortAddr(beneficiary)}</span></div>
-          )}
+          {showBeneficiary && <div>reward → <span className="font-mono">{shortAddr(beneficiary)}</span></div>}
         </div>
-
         <div className="flex gap-2">
           {canVote && (
             <>
-              <button
-                className="btn-success text-xs px-3 py-1"
-                disabled={isBusy}
-                onClick={() =>
-                  onWrite({
-                    address: projectAddress,
-                    abi: FS_PROJECT_ABI,
-                    functionName: "vote",
-                    args: [id, true],
-                  })
-                }
-              >
+              <button className="btn-success text-xs px-3 py-1" disabled={isBusy}
+                onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "vote", args: [id, true] })}>
                 Approve
               </button>
-              <button
-                className="btn-danger text-xs px-3 py-1"
-                disabled={isBusy}
-                onClick={() =>
-                  onWrite({
-                    address: projectAddress,
-                    abi: FS_PROJECT_ABI,
-                    functionName: "vote",
-                    args: [id, false],
-                  })
-                }
-              >
+              <button className="btn-danger text-xs px-3 py-1" disabled={isBusy}
+                onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "vote", args: [id, false] })}>
                 Reject
               </button>
             </>
           )}
           {status === 1 && (
-            <button
-              className="btn-primary text-xs px-3 py-1"
-              disabled={isBusy}
-              onClick={() =>
-                onWrite({
-                  address: projectAddress,
-                  abi: FS_PROJECT_ABI,
-                  functionName: "executeProposal",
-                  args: [id],
-                })
-              }
-            >
+            <button className="btn-primary text-xs px-3 py-1" disabled={isBusy}
+              onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "executeProposal", args: [id] })}>
               Execute & Mint
             </button>
           )}
