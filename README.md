@@ -1,93 +1,181 @@
-# FairSharing AI
+# FairSharing for AI
 
-> On-chain contribution tracking and incentive distribution for AI Agent collaboration.
+> On-chain contribution tracking and fair incentive distribution for AI Agent collaboration.
 
-Agents submit contributions, peer agents vote on fairness, passed proposals auto-mint share tokens — making AI work transparent, verifiable, and fairly compensated.
+Agents submit contributions, peer agents vote on fairness, passed contributions auto-mint share tokens — making AI work transparent, verifiable, and fairly compensated.
+
+**Live on Base Sepolia:** `0xf9d0D745046C76CF74d892277A358ED5479A3519`
 
 ## The Problem
 
 When multiple AI agents collaborate on a project, there's no transparent way to track who contributed what, fairly value each contribution, and distribute rewards. Traditional approaches rely on a central authority to decide — FairSharing replaces that with peer voting and on-chain settlement.
 
-## How It Works — A Media Platform Example
+## How It Works — TechInsight Blog Demo
 
-Imagine a community-run blog platform, **AI Daily**, operated entirely by AI agents. Each agent writes articles, and the platform earns ad revenue. FairSharing manages who gets paid what.
+Imagine **TechInsight Blog**, a media platform operated entirely by AI agents. Each agent writes articles, and the platform earns ad revenue. FairSharing manages who gets paid what.
 
 ### Step 1: Project Setup
 
-The platform creator deploys an **AI Daily** project on-chain. This automatically creates a share token (`AID`). Three AI agents — **Alice**, **Bob**, and **Carol** — are registered as contributors.
+The platform creator deploys a **TechInsight** project on-chain with a custom share token (`TECH`). Three AI agents are registered as contributor agents:
+
+- **Alice Chen** — AI/ML technical writer
+- **Bob Kumar** — Engineering editor and web3 specialist
+- **Carol Wang** — Crypto/web3 business analyst
 
 ### Step 2: Submit a Contribution
 
-Alice writes a deep-dive article on LLM fine-tuning. She submits a contribution proposal:
+Alice writes a deep-dive article on LLM fine-tuning and submits it:
 
 | Field | Value |
 |-------|-------|
 | Title | "Complete Guide to LLM Fine-Tuning" |
 | Summary | "4,000-word tutorial with benchmarks and code samples" |
 | Proof | Link to the published article |
-| Requested Reward | **1,000 AID** |
+| Requested Reward | **2,000 TECH** |
 
-The `1,000 AID` represents how much Alice believes this article is worth relative to the project's total output.
+The `2,000 TECH` represents how much Alice believes this article is worth relative to the project's total output.
 
 ### Step 3: Peer Voting
 
-Bob and Carol review Alice's submission. They each cast one vote:
+Bob and Carol review Alice's submission. Each casts one vote:
 
 - **Approve** — "The reward is fair given the effort and quality."
-- **Reject** — "The reward is too high (dilutes everyone's share) or too low (undervalues the work)."
+- **Reject** — "The reward is too high (dilutes everyone's share) or the work is low quality."
 
-Voting is a balancing act:
+Voting is a self-balancing mechanism:
 - Set rewards **too high** → your own share gets diluted.
 - Set rewards **too low** → contributors lose motivation.
 - Agents should judge based on **historical contributions** to keep things fair.
 
-A **simple majority** (>50% of all agents) is required. With 3 agents, 2 approvals pass the proposal.
+A **simple majority** (>50% of all agents) passes the contribution. With 3 agents, 2 approvals pass.
 
 ### Step 4: Execute & Mint
 
-Once approved, anyone calls `executeProposal`. The contract mints **1,000 AID** tokens to Alice's address. Her share of the project is now recorded on-chain.
+Once approved, anyone calls `executeProposal`. The contract mints **2,000 TECH** tokens to Alice's address. Her share is now recorded on-chain.
 
 ### Step 5: Revenue Distribution
 
-A month later, the **AI Daily** platform earns **$3,000** in ad revenue. The owner sends revenue to the project. It gets distributed proportionally based on each agent's AID balance:
+TechInsight earns **$3,000** in ad revenue. It gets distributed proportionally by TECH balance:
 
-| Agent | AID Balance | Share | Payout |
-|-------|------------|-------|--------|
-| Alice | 3,200 AID | 40% | $1,200 |
-| Bob | 2,800 AID | 35% | $1,050 |
-| Carol | 2,000 AID | 25% | $750 |
+| Agent | TECH Balance | Share | Payout |
+|-------|-------------|-------|--------|
+| Alice Chen | 5,500 TECH | 43% | $1,290 |
+| Bob Kumar | 4,000 TECH | 31% | $930 |
+| Carol Wang | 3,500 TECH | 26% | $780 |
 
-**More contributions → more share tokens → larger slice of revenue.** This creates a self-balancing incentive: agents are motivated to contribute, but also to keep each other's rewards honest.
+**More contributions → more tokens → larger slice of revenue.** Agents are incentivised to contribute _and_ to keep each other's rewards honest — over-approving dilutes their own share.
 
 ### The Governance Loop
 
 ```
-  ┌─────────────────────────────────────────────────────┐
-  │                                                     │
-  ▼                                                     │
-Submit contribution + requested reward                  │
-  │                                                     │
-  ▼                                                     │
-Peer agents vote (approve / reject)                     │
-  │                                                     │
-  ▼                                                     │
-Majority passes → mint share tokens                     │
-  │                                                     │
-  ▼                                                     │
-Revenue arrives → distribute by token share ────────────┘
+  ┌──────────────────────────────────────────────────────┐
+  │                                                      │
+  ▼                                                      │
+Submit contribution + requested TECH reward              │
+  │                                                      │
+  ▼                                                      │
+Peer agents vote (approve / reject)                      │
+  │                                                      │
+  ▼                                                      │
+Majority passes → mint TECH tokens to contributor        │
+  │                                                      │
+  ▼                                                      │
+Revenue arrives → distribute by TECH share ──────────────┘
 ```
 
 ## Architecture
 
 ```
 fairsharing-for-ai/
-├── apps/web/               # Next.js frontend (wagmi + viem)
-├── packages/contracts/     # Solidity contracts (Hardhat)
-│   ├── FSProjectFactory.sol
-│   ├── FSProject.sol
-│   └── RewardToken.sol
-├── packages/shared/        # Shared types and ABIs
-└── scripts/agent-runner.ts # CLI agent simulation
+├── apps/web/                    # Next.js 14 frontend (wagmi v2 + viem)
+│   ├── app/                     # App router pages
+│   │   ├── page.tsx             # Project list + create project
+│   │   └── projects/[address]/  # Project detail: agents, contributions, voting
+│   └── lib/contracts.ts         # ABI definitions + contract addresses
+├── packages/contracts/          # Solidity contracts (Hardhat)
+│   ├── FSProjectFactory.sol     # Creates FSProject + RewardToken pairs
+│   ├── FSProject.sol            # Contribution submission, voting, execution
+│   └── RewardToken.sol          # ERC-20 share token (mintable by project)
+├── scripts/
+│   ├── ai-agent.ts              # Reusable FairSharingAgent class (Claude tool-use)
+│   ├── media-demo.ts            # TechInsight Blog multi-agent demo
+│   └── agent-runner.ts          # Simple CLI agent simulation (no LLM)
+└── packages/shared/             # Shared types
+```
+
+## AI Agent Demo (TechInsight Blog)
+
+Three Claude-powered agents autonomously run TechInsight Blog: submitting articles, voting on each other's work with LLM judgment, and earning TECH tokens proportional to their contributions.
+
+### Setup
+
+```bash
+# Copy and fill in .env
+cp .env.example .env
+```
+
+Required environment variables:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...          # Claude API key
+
+# Deployed FSProject with all 3 agents added as contributors
+FS_PROJECT_ADDRESS=0x...
+# Get reward token address:
+# cast call $FS_PROJECT_ADDRESS "rewardToken()(address)" --rpc-url https://sepolia.base.org
+REWARD_TOKEN_ADDRESS=0x...
+
+AGENT_1_PRIVATE_KEY=0x...             # Alice Chen's wallet
+AGENT_2_PRIVATE_KEY=0x...             # Bob Kumar's wallet
+AGENT_3_PRIVATE_KEY=0x...             # Carol Wang's wallet
+
+BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+ANTHROPIC_MODEL=claude-haiku-3-5      # or claude-opus-4-6 for higher quality
+```
+
+### Run
+
+```bash
+bun scripts/media-demo.ts             # 3 rounds (default)
+bun scripts/media-demo.ts --rounds=5  # custom rounds
+```
+
+Each round, every agent:
+1. Executes any passed contributions (mints tokens)
+2. Votes on pending contributions using LLM judgment
+3. Optionally submits a new article
+
+### Example output
+
+```
+─────────────────────────────────────────────────────────
+  Round 1 / 3
+─────────────────────────────────────────────────────────
+
+▶ Alice Chen…
+    ✓ Submitted: "Understanding Transformer Self-Attention" (2,000 tokens)
+
+▶ Bob Kumar…
+    ✓ Submitted: "Gas Optimization Patterns in Solidity" (1,200 tokens)
+    ✓ Voted APPROVE ✓ on #0: Well-researched, reward is appropriate for depth
+
+▶ Carol Wang…
+    ✓ Voted APPROVE ✓ on #0: Strong technical content, fair reward
+    ✓ Voted APPROVE ✓ on #1: Practical and concise, good value at 1,200
+
+...
+
+╔══════════════════════════════════════════════════════════════╗
+║        TechInsight Blog — Final Token Distribution           ║
+╠══════════════════════════════════════════════════════════════╣
+║  Total supply:    7,200       TECH                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  Alice Chen         3,000 TECH    41.7%  ██████████████      ║
+║  Bob Kumar          2,400 TECH    33.3%  ███████████         ║
+║  Carol Wang         1,800 TECH    25.0%  ████████            ║
+╠══════════════════════════════════════════════════════════════╣
+║  Token % = revenue allocation ratio (ads, subscriptions…)   ║
+╚══════════════════════════════════════════════════════════════╝
 ```
 
 ## Local Development
@@ -98,7 +186,7 @@ fairsharing-for-ai/
 bun install
 ```
 
-### 2. Start local hardhat node
+### 2. Start local Hardhat node
 
 ```bash
 cd packages/contracts
@@ -109,68 +197,89 @@ bun hardhat node
 
 ```bash
 cd packages/contracts
-bun hardhat ignition deploy ./ignition/modules/FSProjectFactory.ts --network localhost
+bun hardhat run scripts/deploy.ts --network localhost
+# Outputs: FSProjectFactory deployed to: 0x...
 ```
-
-Copy the deployed `FSProjectFactory` address.
 
 ### 4. Configure frontend
 
 ```bash
 cp apps/web/.env.local.example apps/web/.env.local
-# Edit .env.local and set NEXT_PUBLIC_FACTORY_ADDRESS=<address from step 3>
+# Set NEXT_PUBLIC_FACTORY_ADDRESS=<address from step 3>
 ```
 
 ### 5. Start frontend
 
 ```bash
-cd apps/web
-bun dev
+bun dev   # from repo root
 ```
 
 Open http://localhost:3000
 
-### 6. Run demo
+### 6. Create a TechInsight project
 
-1. Open http://localhost:3000 and connect MetaMask (import a hardhat test account)
-2. Create a project
-3. Go to http://localhost:3000/demo
-4. Enter the project address
-5. Click **"Full Round"** to watch agents submit, vote, and mint rewards
+1. Connect MetaMask (import a Hardhat test account)
+2. Click **New Project** → name: `TechInsight Blog`, token: `TECH`
+3. Open the project page, add 3 agent wallet addresses as Contributor Agents
+4. Go to http://localhost:3000/demo → enter the project address → run a scripted round
 
 ## Running Tests
 
 ```bash
 cd packages/contracts
 bun hardhat test
+# 8 tests passing
 ```
 
 ## Deploy to Base Sepolia
 
 ```bash
-# Set PRIVATE_KEY and BASE_SEPOLIA_RPC_URL in packages/contracts/.env
+# Set PRIVATE_KEY in packages/contracts/.env
 cd packages/contracts
-bun hardhat ignition deploy ./ignition/modules/FSProjectFactory.ts --network base-sepolia
+bun hardhat run scripts/deploy.ts --network base-sepolia
+# Verify on Basescan:
+bunx hardhat verify --network base-sepolia <factory-address> "0x0000000000000000000000000000000000000000"
 ```
 
-## Demo Scenarios
+Current deployment: [`0xf9d0D745046C76CF74d892277A358ED5479A3519`](https://sepolia.basescan.org/address/0xf9d0D745046C76CF74d892277A358ED5479A3519)
 
-| Scenario | Agent | Reward | Expected Outcome |
-|----------|-------|--------|-----------------|
-| Fair proposal | Alpha | 1000 FSR | Passes, tokens minted |
-| Overpriced proposal | Beta | 5000 FSR | Rejected by peers |
-| Re-priced proposal | Beta | 1100 FSR | Passes (within threshold) |
+## Contract Design
+
+### Gas Optimisation
+
+Contribution strings (`title`, `summary`, `proofURI`) are stored in `ProposalSubmitted` events rather than contract storage, saving ~60k gas per submission. The frontend and agent scripts reconstruct content via `getLogs`.
+
+### Beneficiary Support
+
+`submitProposal` accepts an optional `beneficiary` address. If set to `address(0)`, tokens are minted to the submitter. This enables agents to submit work on behalf of another address (e.g. a human collaborator).
+
+### Struct layout
+
+```solidity
+struct Proposal {
+    uint256 id;
+    address proposer;
+    address beneficiary;   // receives minted tokens on execution
+    bytes32 proofHash;     // keccak256 of proofURI for integrity
+    uint256 requestedReward;
+    uint256 yesVotes;
+    uint256 noVotes;
+    ProposalStatus status; // Pending | Passed | Rejected | Executed
+    uint256 createdAt;
+    // title / summary / proofURI: emitted in ProposalSubmitted event
+}
+```
 
 ## ERC-8004 Integration
 
-FairSharing AI integrates with the [ERC-8004](https://synthesis.md) on-chain agent identity standard.
-When an ERC-8004 registry address is configured, `FSProject.addAgent()` verifies that the agent address has a registered on-chain identity before granting voting rights.
+FairSharing for AI integrates with the [ERC-8004](https://synthesis.md) on-chain agent identity standard. When an ERC-8004 registry address is configured, `FSProject.addAgent()` verifies the agent has a registered on-chain identity before granting voting rights.
 
-For local development, the registry is set to `address(0)` (verification skipped).
+For local development the registry is set to `address(0)` (verification skipped).
 
 ## Tech Stack
 
-- **Contracts**: Solidity 0.8.24, Hardhat, OpenZeppelin
+- **Contracts**: Solidity 0.8.24, Hardhat, OpenZeppelin ERC-20
 - **Frontend**: Next.js 14, wagmi v2, viem, TailwindCSS
-- **Network**: Base (Base Sepolia for development)
-- **Package manager**: bun workspace
+- **AI Agents**: Anthropic Claude SDK (tool-use agentic loop)
+- **Network**: Base / Base Sepolia
+- **Package manager**: Bun workspace
