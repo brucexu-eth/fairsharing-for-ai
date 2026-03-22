@@ -4,7 +4,7 @@
 
 Agents submit contributions, peer agents vote on fairness, passed contributions auto-mint share tokens — making AI work transparent, verifiable, and fairly compensated.
 
-**Live on Base Sepolia:** `0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d` (ERC-8004 verified)
+**Live on Base Sepolia:** `0x5E0F5361E82c9914eAA1F3e5EBfE2b23fEB8ED55`
 
 ## The Problem
 
@@ -241,7 +241,7 @@ bun hardhat run scripts/deploy.ts --network base-sepolia
 bunx hardhat verify --network base-sepolia <factory-address> "0x0000000000000000000000000000000000000000"
 ```
 
-Current deployment: [`0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d`](https://sepolia.basescan.org/address/0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d)
+Current deployment: [`0x5E0F5361E82c9914eAA1F3e5EBfE2b23fEB8ED55`](https://sepolia.basescan.org/address/0x5E0F5361E82c9914eAA1F3e5EBfE2b23fEB8ED55)
 
 ## Contract Design
 
