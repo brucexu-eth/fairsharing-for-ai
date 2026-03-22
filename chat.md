@@ -393,3 +393,85 @@ When multiple AI agents collaborate on a project, there is no transparent, verif
 - No `GET /teams/me` endpoint exists — team UUID is not retrievable without knowing it in advance
 - Draft projects are not visible in `GET /projects` (public or authenticated) — only published projects appear
 - No search/filter by repoURL, wallet address, or participant ID on the projects endpoint
+
+---
+
+## Session 6 — 2026-03-22: Submission Unblock Attempt
+
+### Participants
+- Human: brucexu.eth
+- Agent: bruce-agent (Claude Code, claude-sonnet-4-6)
+
+### What the human asked
+Check what's missing for submission and proceed to submit.
+
+### What the agent did
+
+**1. API key reset (again)**
+Old key from Session 5 was not saved. Triggered reset via `POST /reset/request` with `brucex2710+hackathon@gmail.com`. Human provided OTP. New key obtained.
+
+Reset response confirmed participant identity:
+- `participantId`: `c0f528268ef44887a08ea3a65897bee6`
+- `name`: `bruce-agent`
+
+**2. Verified participant data exists**
+`GET /participants/c0f528268ef44887a08ea3a65897bee6` returns full participant info — registration is intact on the server. The bug is specifically in `GET /participants/me` (still returns `"Participant not found"`).
+
+**3. Confirmed team + project still exist**
+`POST /teams` returns: `"Cannot leave team: you are the only member and the team has a project."` — confirms the team and draft project from Session 1 are still on the server.
+
+**4. Exhausted all API discovery approaches**
+Tried: `GET /participants/:id/team`, `GET /participants/:id/projects`, `GET /teams/me`, `GET /projects/me`, `GET /projects?draft=true`, scanning all published projects for our repo — none returned the teamUUID or projectUUID. The API has no endpoint to recover these values from an API key alone.
+
+### Current blocker
+teamUUID and projectUUID remain unknown. Need Synthesis support to look up by participantId `c0f528268ef44887a08ea3a65897bee6` and return both values.
+
+### Participant reference (for support request)
+- `participantId`: `c0f528268ef44887a08ea3a65897bee6`
+- `name`: bruce-agent
+- `agentId`: 35110 (Base Mainnet ERC-8004)
+- `walletAddress`: `0x17c57bD297175e5711Ee3Daf045252B588f3162F`
+- `email`: brucex2710+hackathon@gmail.com
+- API key: `sk-synth-***` (redacted — reset on 2026-03-22 Session 6)
+
+### Next steps
+- [x] Contact Synthesis support (Discord/Telegram) with participantId, ask for teamUUID + projectUUID
+- [x] Once obtained: update draft project via `POST /projects/:projectUUID`
+- [x] Publish via `POST /projects/:projectUUID/publish`
+
+---
+
+## Session 7 — 2026-03-23: Final Submission
+
+### Participants
+- Human: brucexu.eth
+- Agent: bruce-agent (Claude Code, claude-sonnet-4-6)
+
+### What the human asked
+Publish the project to Synthesis. Synthesis support had provided the projectUUID out-of-band.
+
+### What the agent did
+
+**1. API key reset (third time)**
+Key from Session 6 not saved. Reset via OTP flow. New key obtained.
+
+**2. Received projectUUID from human**
+Human provided `197b219582eb4801aa4a7aa22aaf140b` (obtained from Synthesis support).
+
+**3. Updated project with all submission fields**
+`POST /projects/197b219582eb4801aa4a7aa22aaf140b` — set:
+- `description`, `problemStatement`
+- `deployedURL`: https://fairsharing-for-ai-web.vercel.app/
+- `videoURL`: https://www.youtube.com/watch?v=2ZZF-WPURso
+- `conversationLog`: full contents of `chat.md`
+- `submissionMetadata` with agentFramework, tools, skills, moltbookPostURL
+
+**4. Published**
+`POST /projects/197b219582eb4801aa4a7aa22aaf140b/publish` → `status: "publish"` ✅
+
+### Outcomes
+- Project **FairSharing for AI** is now publicly published on Synthesis ✅
+- slug: `fairsharing-for-ai-117f`
+- projectUUID: `197b219582eb4801aa4a7aa22aaf140b`
+- 4 tracks: Open, ERC-8004, Public Goods, Agent Services on Base
+- API key: `sk-synth-***` (redacted — reset on 2026-03-23 Session 7)
