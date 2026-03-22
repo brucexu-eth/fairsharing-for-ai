@@ -277,3 +277,119 @@ Enhance the ERC-8004 integration in the Solidity contracts: expand the `IERC8004
 - `IERC8004Registry.sol` now has 3 functions (was 1) matching real ERC-8004 spec ✅
 - `FSProject.sol` emits `ContributionRecorded` for on-chain reputation indexing ✅
 - All tests pass, contracts compile cleanly ✅
+
+---
+
+## Session 5 — 2026-03-22: Hackathon Submission Attempt & Info Collection
+
+### Participants
+- Human: brucexu.eth
+- Agent: bruce-agent (Claude Code, claude-sonnet-4-6)
+
+### What the human asked
+Prepare and submit the project to the Synthesis hackathon platform via API.
+
+### What the agent did
+
+**1. Fetched submission requirements**
+- Read `https://synthesis.md/submission/skill.md` — full end-to-end submission flow
+- Identified required fields: `teamUUID`, `name`, `description`, `problemStatement`, `repoURL`, `trackUUIDs`, `conversationLog`, `submissionMetadata`
+
+**2. API key reset**
+- Old key was lost (not stored from Session 1). Triggered reset via `POST /reset/request` with `brucex2710+hackathon@gmail.com`
+- Human provided OTP `635952`; reset completed via `POST /reset/confirm`
+- New API key obtained (stored below, redacted in log)
+- Participant confirmed: `name: bruce-agent`, `agentId: 35110`, `custodyType: self_custody` ✅
+
+**3. Blocked by API bug — teamUUID not discoverable**
+- `GET /participants/me` → `"Participant not found"` (bug: key works for other endpoints)
+- `GET /teams/me` → `"Team not found"` (no such endpoint in the API)
+- `POST /teams` → `"Cannot leave team: you are the only member and the team has a project"` (confirms team+project exist)
+- Searched all 316 published projects across 7 pages — draft project not visible in public list
+- No API endpoint exists to retrieve teamUUID or projectUUID from a valid API key alone
+- **Conclusion:** The draft project from Session 1 exists on the server but is inaccessible due to missing `/teams/me` endpoint. Submission blocked until API is fixed or teamUUID is retrieved from Synthesis support.
+
+### Submission info (ready to submit once API is accessible)
+
+**Participant**
+- Name: bruce-agent
+- Agent ID: 35110 (Base Mainnet ERC-8004)
+- Wallet: `0x17c57bD297175e5711Ee3Daf045252B588f3162F`
+- API key: `sk-synth-***` (redacted — reset on 2026-03-22)
+
+**Project fields**
+| Field | Value |
+|-------|-------|
+| `name` | FairSharing for AI |
+| `repoURL` | https://github.com/brucexu-eth/fairsharing-for-ai |
+| `deployedURL` | https://fairsharing-for-ai-web.vercel.app/ |
+| `videoURL` | https://www.youtube.com/watch?v=2ZZF-WPURso |
+| `moltbookPostURL` | https://www.moltbook.com/post/893874cc-9513-44c9-b580-34c545c49322 |
+
+**On-chain deployments**
+- Factory (Base Sepolia): [`0x91d4193fdde3e03a64b547d37b1d560103b7cb60d73236f369a0b120ec6eb891`](https://sepolia.basescan.org/tx/0x91d4193fdde3e03a64b547d37b1d560103b7cb60d73236f369a0b120ec6eb891)
+- TechInsight Blog project: `0xD7dF5Ac4d22546541F271b71b394432C027148D5` (Base Sepolia)
+- TECH reward token: `0x59b6698b64e91ad48C03089B944e0B0D819218f2` (Base Sepolia)
+
+**Track UUIDs (4 tracks)**
+| UUID | Track |
+|------|-------|
+| `fdb76d08812b43f6a5f454744b66f590` | Synthesis Open Track |
+| `3bf41be958da497bbb69f1a150c76af9` | Agents With Receipts — ERC-8004 |
+| `32de074327bd4f6d935798d285becdfb` | Mechanism Design for Public Goods Evaluation |
+| `6f0e3d7dcadf4ef080d3f424963caff5` | Agent Services on Base |
+
+**`description`**
+```
+FairSharing for AI is an on-chain contribution tracking and fair incentive distribution system for AI agent collaboration. Agents submit contributions with verifiable proofs and self-requested token rewards, peer agents vote on fairness using LLM judgment, and approved contributions automatically mint share tokens on-chain. Token balance = funding allocation ratio when the project receives revenue.
+
+Built on Base with Solidity + Next.js + wagmi/viem. Deeply integrates ERC-8004 on-chain agent identity: only agents with registered ERC-8004 identities can join a project, and every executed contribution emits a ContributionRecorded event creating an indexable on-chain reputation trail.
+
+The TechInsight Blog demo shows three Claude-powered peer editors (Alice, Bob, Carol) autonomously submitting articles, voting on each other's work, and earning TECH tokens — with governance self-correction visible when inflated reward requests get rejected by the peer editors.
+```
+
+**`problemStatement`**
+```
+When multiple AI agents collaborate on a project, there is no transparent, verifiable, or contestable mechanism to track who contributed what, fairly value each contribution, and distribute rewards. Traditional approaches rely on a central authority or subjective human judgment — opaque, unfair, and not scalable to autonomous AI collaboration. FairSharing replaces centralized reward decisions with peer voting and on-chain settlement: agents submit work with self-requested rewards, peers vote to approve or reject, majority approval mints share tokens, and revenue is distributed proportionally to token balance. Over-approving dilutes your own share; under-rewarding discourages contribution — creating a self-balancing governance loop without any central authority.
+```
+
+**`submissionMetadata`**
+```json
+{
+  "agentFramework": "other",
+  "agentFrameworkOther": "Anthropic Claude SDK tool-use agentic loop with viem",
+  "agentHarness": "claude-code",
+  "model": "claude-sonnet-4-6",
+  "skills": ["synthesis"],
+  "tools": ["hardhat", "viem", "wagmi", "next.js", "tailwindcss", "openzeppelin", "bun", "anthropic-sdk", "basescan"],
+  "helpfulResources": [
+    "https://viem.sh/docs",
+    "https://eips.ethereum.org/EIPS/eip-8004",
+    "https://docs.base.org",
+    "https://sepolia.basescan.org"
+  ],
+  "helpfulSkills": [
+    {
+      "name": "synthesis",
+      "reason": "Guided the full registration flow and track selection in Session 1; helped structure the submission payload"
+    }
+  ],
+  "intention": "continuing",
+  "intentionNotes": "Planning to continue developing FairSharing as a production protocol for multi-agent project governance and revenue sharing.",
+  "moltbookPostURL": "https://www.moltbook.com/post/893874cc-9513-44c9-b580-34c545c49322"
+}
+```
+
+**`conversationLog`**: contents of `chat.md` in this repo
+
+### What is still needed before submitting
+- [ ] **teamUUID** — blocked by API bug; need Synthesis support or `/teams/me` endpoint fix
+- [ ] **projectUUID** — same blocker (draft created in Session 1, UUID not saved)
+- [ ] Once unblocked: `POST /projects/:projectUUID` to update all fields above
+- [ ] Then: `POST /projects/:projectUUID/publish` to publish
+
+### Known API issues (as of 2026-03-22)
+- `GET /participants/me` returns `"Participant not found"` even with a valid API key (broken)
+- No `GET /teams/me` endpoint exists — team UUID is not retrievable without knowing it in advance
+- Draft projects are not visible in `GET /projects` (public or authenticated) — only published projects appear
+- No search/filter by repoURL, wallet address, or participant ID on the projects endpoint
