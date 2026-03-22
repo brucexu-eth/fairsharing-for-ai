@@ -10,6 +10,7 @@ import {
   useAccount,
   usePublicClient,
 } from "wagmi";
+import { keepPreviousData } from "@tanstack/react-query";
 import { keccak256, toBytes, parseUnits, formatUnits } from "viem";
 import { FS_PROJECT_ABI, REWARD_TOKEN_ABI, PROPOSAL_SUBMITTED_EVENT } from "@/lib/contracts";
 import { shortAddr, formatToken, timeAgo } from "@/lib/format";
@@ -62,11 +63,11 @@ export default function ProjectPage() {
   });
   const { data: agents, refetch: refetchAgents } = useReadContract({
     address: projectAddress, abi: FS_PROJECT_ABI, functionName: "getAgents",
-    query: { refetchInterval: POLL_MS },
+    query: { refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
   const { data: proposalCount, refetch: refetchCount } = useReadContract({
     address: projectAddress, abi: FS_PROJECT_ABI, functionName: "proposalCount",
-    query: { refetchInterval: POLL_MS },
+    query: { refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
   const { data: tokenSymbol } = useReadContract({
     address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "symbol",
@@ -74,19 +75,19 @@ export default function ProjectPage() {
   });
   const { data: totalSupply, refetch: refetchSupply } = useReadContract({
     address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "totalSupply",
-    query: { enabled: !!rewardTokenAddr, refetchInterval: POLL_MS },
+    query: { enabled: !!rewardTokenAddr, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
   const { data: myBalance, refetch: refetchBalance } = useReadContract({
     address: rewardTokenAddr, abi: REWARD_TOKEN_ABI, functionName: "balanceOf",
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: !!rewardTokenAddr && !!userAddress, refetchInterval: POLL_MS },
+    query: { enabled: !!rewardTokenAddr && !!userAddress, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
 
   // Direct on-chain isAgent check (authoritative — avoids stale array issues)
   const { data: isAgentOnChain } = useReadContract({
     address: projectAddress, abi: FS_PROJECT_ABI, functionName: "isAgent",
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: !!userAddress, refetchInterval: POLL_MS },
+    query: { enabled: !!userAddress, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
   const isOwner = !!(userAddress && owner && userAddress.toLowerCase() === owner.toLowerCase());
   const isAgent = !!isAgentOnChain;
@@ -99,7 +100,7 @@ export default function ProjectPage() {
       functionName: "balanceOf" as const,
       args: [a] as const,
     })),
-    query: { enabled: !!rewardTokenAddr && !!agents?.length, refetchInterval: POLL_MS },
+    query: { enabled: !!rewardTokenAddr && !!agents?.length, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
 
   // ── Read proposals (auto-refresh) ─────────────────────────────────────────
@@ -111,7 +112,7 @@ export default function ProjectPage() {
       functionName: "getProposal" as const,
       args: [BigInt(i)] as const,
     })),
-    query: { enabled: count > 0, refetchInterval: POLL_MS },
+    query: { enabled: count > 0, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
 
   // ── Fetch ProposalSubmitted event strings ──────────────────────────────────
@@ -329,23 +330,25 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {proposalResults?.map((result) => {
-          if (result.status !== "success" || !result.result) return null;
-          const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] = result.result;
-          const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
-          return (
-            <ContributionCard
-              key={id.toString()}
-              id={id} proposer={proposer} beneficiary={beneficiary}
-              title={strings.title} summary={strings.summary} proofURI={strings.proofURI}
-              requestedReward={requestedReward} yesVotes={yesVotes} noVotes={noVotes}
-              status={Number(status)} createdAt={createdAt}
-              projectAddress={projectAddress} isAgent={isAgent} userAddress={userAddress}
-              isBusy={isBusy} onWrite={(args) => writeContract(args)}
-              tokenSymbol={tokenSymbol ?? "tokens"} totalAgents={agents?.length ?? 0}
-            />
-          );
-        })}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {[...(proposalResults ?? [])].reverse().map((result) => {
+            if (result.status !== "success" || !result.result) return null;
+            const [id, proposer, beneficiary, , requestedReward, yesVotes, noVotes, status, createdAt] = result.result;
+            const strings = proposalStrings[id.toString()] ?? { title: `Contribution #${id}`, summary: "", proofURI: "" };
+            return (
+              <ContributionCard
+                key={id.toString()}
+                id={id} proposer={proposer} beneficiary={beneficiary}
+                title={strings.title} summary={strings.summary} proofURI={strings.proofURI}
+                requestedReward={requestedReward} yesVotes={yesVotes} noVotes={noVotes}
+                status={Number(status)} createdAt={createdAt}
+                projectAddress={projectAddress} isAgent={isAgent} userAddress={userAddress}
+                isBusy={isBusy} onWrite={(args) => writeContract(args)}
+                tokenSymbol={tokenSymbol ?? "tokens"} totalAgents={agents?.length ?? 0}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -370,7 +373,10 @@ function AgentCard({ address, isMe, balance, pct, tokenSymbol }: {
     <div className={`rounded-lg border p-3 space-y-2 ${isMe ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white"}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+          <span className="flex items-center gap-1 shrink-0 text-xs text-green-600 font-medium">
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            active
+          </span>
           <button
             className="text-xs font-mono text-gray-700 hover:text-indigo-600 text-left truncate"
             onClick={() => setExpanded((v) => !v)}
@@ -426,11 +432,19 @@ function ContributionCard({
   const { data: alreadyVoted } = useReadContract({
     address: projectAddress, abi: FS_PROJECT_ABI, functionName: "hasVoted",
     args: userAddress ? [id, userAddress as `0x${string}`] : undefined,
-    query: { enabled: !!userAddress, refetchInterval: POLL_MS },
+    query: { enabled: !!userAddress, refetchInterval: POLL_MS, placeholderData: keepPreviousData },
   });
+
+  // null = hidden, string = reject reason input shown
+  const [rejectReason, setRejectReason] = useState<string | null>(null);
 
   const canVote = isAgent && status === 0 && !alreadyVoted;
   const showBeneficiary = beneficiary.toLowerCase() !== proposer.toLowerCase();
+
+  function confirmReject() {
+    onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "vote", args: [id, false] });
+    setRejectReason(null);
+  }
 
   return (
     <div className="card p-4 space-y-3">
@@ -440,11 +454,11 @@ function ContributionCard({
             <span className="text-xs text-gray-400 font-mono">#{id.toString()}</span>
             <StatusBadge status={status} />
             {isAgent && status === 0 && alreadyVoted && (
-              <span className="text-xs text-gray-400">(voted)</span>
+              <span className="text-xs text-gray-400">✓ voted</span>
             )}
           </div>
           <h3 className="font-semibold text-gray-900">{title}</h3>
-          {summary && <p className="text-sm text-gray-600 whitespace-pre-wrap">{summary}</p>}
+          {summary && <p className="text-sm text-gray-600 line-clamp-3">{summary}</p>}
           {proofURI && (
             <a href={proofURI} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:underline break-all">
@@ -461,7 +475,7 @@ function ContributionCard({
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-gray-500">
           <span>{yesVotes.toString()} yes / {noVotes.toString()} no</span>
-          <span>{totalAgents > 0 ? `needs >${Math.floor(totalAgents / 2)} to pass` : ""}</span>
+          <span>{totalAgents > 0 ? `needs ≥${Math.floor(totalAgents / 2) + 1} of ${totalAgents} to pass` : ""}</span>
         </div>
         {totalAgents > 0 && (
           <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
@@ -471,28 +485,53 @@ function ContributionCard({
         )}
       </div>
 
+      {/* Reject reason panel */}
+      {rejectReason !== null && (
+        <div className="space-y-2 pt-1 border-t border-red-100">
+          <p className="text-xs text-red-600 font-medium">Why are you rejecting this?</p>
+          <input
+            className="input text-xs w-full"
+            placeholder="One sentence reason (e.g. reward too high for scope of work)"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            autoFocus
+            disabled={isBusy}
+          />
+          <div className="flex gap-2">
+            <button className="btn-danger text-xs px-3 py-1" disabled={isBusy || !rejectReason.trim()}
+              onClick={confirmReject}>
+              ✗ Confirm Reject
+            </button>
+            <button className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1" disabled={isBusy}
+              onClick={() => setRejectReason(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-400 space-y-0.5">
           <div>by {shortAddr(proposer)} · {timeAgo(createdAt)}</div>
           {showBeneficiary && <div>reward → <span className="font-mono">{shortAddr(beneficiary)}</span></div>}
         </div>
         <div className="flex gap-2">
-          {canVote && (
+          {canVote && rejectReason === null && (
             <>
               <button className="btn-success text-xs px-3 py-1" disabled={isBusy}
                 onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "vote", args: [id, true] })}>
-                Approve
+                ✓ Approve
               </button>
               <button className="btn-danger text-xs px-3 py-1" disabled={isBusy}
-                onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "vote", args: [id, false] })}>
-                Reject
+                onClick={() => setRejectReason("")}>
+                ✗ Reject
               </button>
             </>
           )}
           {status === 1 && (
             <button className="btn-primary text-xs px-3 py-1" disabled={isBusy}
               onClick={() => onWrite({ address: projectAddress, abi: FS_PROJECT_ABI, functionName: "executeProposal", args: [id] })}>
-              Execute & Mint
+              ⚡ Execute & Mint
             </button>
           )}
         </div>
