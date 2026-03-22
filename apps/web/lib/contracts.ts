@@ -1,3 +1,29 @@
+export const ERC8004_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" as `0x${string}`;
+
+export const ERC8004_REGISTRY_ABI = [
+  {
+    inputs: [{ type: "address", name: "owner" }],
+    name: "balanceOf",
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ type: "uint256", name: "tokenId" }],
+    name: "ownerOf",
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ type: "uint256", name: "tokenId" }],
+    name: "tokenURI",
+    outputs: [{ type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
 export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS ?? "") as `0x${string}`;
 
 export const FACTORY_ABI = [
@@ -67,6 +93,19 @@ export const FS_PROJECT_ABI = [
     anonymous: false,
     inputs: [{ indexed: true, internalType: "address", name: "agent", type: "address" }],
     name: "AgentRemoved",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "agent", type: "address" },
+      { indexed: true, internalType: "uint256", name: "proposalId", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "reward", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "yesVotes", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "noVotes", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "totalAgents", type: "uint256" },
+    ],
+    name: "ContributionRecorded",
     type: "event",
   },
   {
@@ -166,6 +205,13 @@ export const FS_PROJECT_ABI = [
     inputs: [{ internalType: "address", name: "", type: "address" }],
     name: "isAgent",
     outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "erc8004Registry",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
     stateMutability: "view",
     type: "function",
   },

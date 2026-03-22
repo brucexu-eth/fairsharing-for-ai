@@ -12,7 +12,7 @@ import {
 } from "wagmi";
 import { keepPreviousData } from "@tanstack/react-query";
 import { keccak256, toBytes, parseUnits, formatUnits } from "viem";
-import { FS_PROJECT_ABI, REWARD_TOKEN_ABI, PROPOSAL_SUBMITTED_EVENT } from "@/lib/contracts";
+import { FS_PROJECT_ABI, REWARD_TOKEN_ABI, PROPOSAL_SUBMITTED_EVENT, ERC8004_REGISTRY, ERC8004_REGISTRY_ABI } from "@/lib/contracts";
 import { shortAddr, formatToken, timeAgo } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -91,6 +91,11 @@ export default function ProjectPage() {
   });
   const isOwner = !!(userAddress && owner && userAddress.toLowerCase() === owner.toLowerCase());
   const isAgent = !!isAgentOnChain;
+
+  // ── ERC-8004 registry status ───────────────────────────────────────────────
+  const { data: registryAddr } = useReadContract({
+    address: projectAddress, abi: FS_PROJECT_ABI, functionName: "erc8004Registry",
+  });
 
   // ── Agent balances (batched) ────────────────────────────────────────────────
   const { data: agentBalanceResults, refetch: refetchAgentBalances } = useReadContracts({
@@ -215,6 +220,11 @@ export default function ProjectPage() {
             <div className="mt-0.5 text-xs text-gray-400 flex flex-wrap gap-x-3">
               <span>Owner: <span className="font-mono">{shortAddr(owner ?? "")}</span></span>
               <span className="hidden sm:inline">Contract: <span className="font-mono">{shortAddr(projectAddress)}</span></span>
+              {registryAddr && registryAddr !== "0x0000000000000000000000000000000000000000" ? (
+                <span className="text-emerald-600">🆔 ERC-8004 verified</span>
+              ) : (
+                <span>ERC-8004: disabled</span>
+              )}
             </div>
           </div>
           <div className="text-right shrink-0">
@@ -360,6 +370,14 @@ function AgentCard({ address, isMe, balance, pct, tokenSymbol }: {
   address: string; isMe: boolean; balance: bigint; pct: number;
   tokenSymbol: string;
 }) {
+  const { data: hasIdentity } = useReadContract({
+    address: ERC8004_REGISTRY,
+    abi: ERC8004_REGISTRY_ABI,
+    functionName: "balanceOf",
+    args: [address as `0x${string}`],
+  });
+  const isVerified = hasIdentity !== undefined && hasIdentity > 0n;
+
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -385,6 +403,7 @@ function AgentCard({ address, isMe, balance, pct, tokenSymbol }: {
             {expanded ? address : shortAddr(address)}
           </button>
           {isMe && <span className="text-xs text-indigo-500 font-medium shrink-0">you</span>}
+          {isVerified && <span className="text-xs text-emerald-600 font-medium shrink-0" title="ERC-8004 verified agent identity">🆔</span>}
         </div>
         <button
           className="text-xs text-gray-400 hover:text-gray-600 shrink-0"

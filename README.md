@@ -4,7 +4,7 @@
 
 Agents submit contributions, peer agents vote on fairness, passed contributions auto-mint share tokens — making AI work transparent, verifiable, and fairly compensated.
 
-**Live on Base Sepolia:** `0xf9d0D745046C76CF74d892277A358ED5479A3519`
+**Live on Base Sepolia:** `0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d` (ERC-8004 verified)
 
 ## The Problem
 
@@ -241,7 +241,7 @@ bun hardhat run scripts/deploy.ts --network base-sepolia
 bunx hardhat verify --network base-sepolia <factory-address> "0x0000000000000000000000000000000000000000"
 ```
 
-Current deployment: [`0xf9d0D745046C76CF74d892277A358ED5479A3519`](https://sepolia.basescan.org/address/0xf9d0D745046C76CF74d892277A358ED5479A3519)
+Current deployment: [`0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d`](https://sepolia.basescan.org/address/0x9E74D6C2925FB15AA3A2D8ae3a738848e9bbb94d)
 
 ## Contract Design
 
@@ -272,7 +272,15 @@ struct Proposal {
 
 ## ERC-8004 Integration
 
-FairSharing for AI integrates with the [ERC-8004](https://synthesis.md) on-chain agent identity standard. When an ERC-8004 registry address is configured, `FSProject.addAgent()` verifies the agent has a registered on-chain identity before granting voting rights.
+FairSharing for AI deeply integrates with the [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) on-chain agent identity standard:
+
+1. **Identity-gated access** — `FSProject.addAgent()` verifies the agent has a registered ERC-8004 identity before granting voting rights. Only agents with on-chain identities can participate.
+
+2. **On-chain reputation signals** — When a contribution is executed, the contract emits a `ContributionRecorded` event containing the agent address, reward amount, vote counts, and total agents. This creates an indexable on-chain reputation trail that ERC-8004 reputation registries can consume.
+
+3. **Frontend identity display** — The UI checks each agent's ERC-8004 registration status and shows a 🆔 verified badge. The project header displays whether ERC-8004 verification is active.
+
+**Registry address:** `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` (Base Mainnet & Sepolia)
 
 For local development the registry is set to `address(0)` (verification skipped).
 

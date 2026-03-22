@@ -69,6 +69,17 @@ contract FSProject {
     event ProposalRejected(uint256 indexed id);
     event ProposalExecuted(uint256 indexed id, address indexed beneficiary, uint256 reward);
 
+    /// @notice Emitted as an on-chain reputation signal when a contribution is executed.
+    ///         Other contracts (e.g. ERC-8004 reputation registries) can index this.
+    event ContributionRecorded(
+        address indexed agent,
+        uint256 indexed proposalId,
+        uint256 reward,
+        uint256 yesVotes,
+        uint256 noVotes,
+        uint256 totalAgents
+    );
+
     modifier onlyOwner() {
         require(msg.sender == owner, "FSProject: not owner");
         _;
@@ -197,6 +208,7 @@ contract FSProject {
         rewardToken.mint(p.beneficiary, p.requestedReward);
 
         emit ProposalExecuted(proposalId, p.beneficiary, p.requestedReward);
+        emit ContributionRecorded(p.beneficiary, proposalId, p.requestedReward, p.yesVotes, p.noVotes, _agents.length);
     }
 
     // ─── Views ───────────────────────────────────────────────────────────────
